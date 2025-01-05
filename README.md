@@ -1,15 +1,33 @@
-# README
+# **Python4SRC2 - Gestion des Services via SSH**
 
-Ce document explique les **étapes préalables** à mettre en place avant de pouvoir exécuter correctement le script principal (par exemple, `main.py`) qui utilise les classes définies dans `sshpackagemanager.py`. L’objectif est d’automatiser l’installation et la configuration de certains services (Apache, vsftpd, OpenLDAP…) et de proposer un accès “lecture seule” pour certains utilisateurs non-admin.
+Ce projet Python permet de gérer à distance l'installation, la configuration, et la maintenance de services tels qu'Apache, vsftpd, et OpenLDAP via SSH. Il offre également des outils pour la gestion des utilisateurs Linux.
 
 ---
 
-## 1. Prérequis
+## **Fonctionnalités principales**
+- **Gestion des paquets** : Installation, mise à jour, suppression et vérification.
+- **Serveur Web (Apache)** :
+  - Configuration de nouveaux sites virtuels.
+  - Gestion des fichiers de configuration.
+  - Activation ou suppression des sites.
+- **Serveur FTP (vsftpd)** :
+  - Configuration rapide des connexions anonymes, locales et d'écriture.
+  - Visualisation de la configuration actuelle.
+- **OpenLDAP** :
+  - Installation et configuration non-interactive.
+  - Ajout et gestion d'utilisateurs LDAP.
+- **Gestion des utilisateurs Linux** :
+  - Création et suppression d'utilisateurs.
+  - Modification des mots de passe.
+  - Liste des groupes utilisateurs.
+
+---
+
+## **1. Prérequis**
 
 ### a) Python et dépendances
-
-1. **Installer Python 3** (sur la machine depuis laquelle vous allez lancer le script).  
-2. **Installer la bibliothèque Paramiko** (gestion du SSH) :  
+1. **Installer Python 3** sur la machine locale.
+2. Installer la bibliothèque `paramiko` :
    ```bash
    pip install paramiko
    ```
@@ -19,102 +37,133 @@ Ce document explique les **étapes préalables** à mettre en place avant de pou
    ```
 
 ### b) Machine distante
+- Une machine distante fonctionnant sous **Debian/Ubuntu** ou une distribution similaire.
+- SSH doit être installé et activé sur cette machine.
 
-- Assurez-vous de disposer d’une **machine cible** (Debian/Ubuntu ou similaire) accessible en SSH.  
-- Vérifiez que **`ssh`** est installé et activé sur la machine distante.
-
-### c) Utilisateur et droits
-
-1. **Créer un utilisateur** (exemple : `ouss`) sur la machine distante.  
-2. **Configurer** (ou non) son accès `sudo`, selon vos besoins :  
-   - Les utilisateurs **admin** ont accès à toutes les commandes `sudo`.  
-   - Les utilisateurs **non-admin** peuvent avoir un **accès restreint** à certaines commandes `sudo` (voir ci-dessous).  
+### c) Utilisateur SSH
+1. Un utilisateur existant avec un mot de passe.
+2. Des droits sudo peuvent être requis pour certaines fonctionnalités.
 
 ---
 
-## 2. Configuration “sudoers”
+## **2. Structure du projet**
 
-### a) Limiter l’accès `sudo` pour un non-admin (lecture seule)
+```
+Python4SRC2/
+├── sshpackagemanager.py    # Classes pour gérer les paquets, Apache, FTP, LDAP, utilisateurs.
+├── main.py                 # Menu principal et logique du script.
+├── README.md               # Documentation du projet.
+```
 
-Si vous souhaitez donner à un utilisateur (ex. `ouss`) la possibilité de **consulter** la configuration Apache/FTP sans lui donner les droits pour l’installer ou la modifier, **éditez** le fichier sudoers en utilisant :
+---
 
+## **3. Configuration préalable**
+
+### a) Configuration sudoers (facultatif)
+Si vous souhaitez limiter les commandes disponibles pour un utilisateur non-admin, éditez le fichier sudoers :
 ```bash
 sudo visudo
 ```
-
-Dans ce fichier (ou dans un fichier séparé sous `/etc/sudoers.d/`), ajoutez :
-
+Ajoutez une ligne similaire à :
 ```bash
 Cmnd_Alias APACHE_CONF = /usr/bin/cat /etc/apache2/sites-available/*.conf
-Cmnd_Alias FTP_CONF    = /usr/bin/grep -E '^(anonymous_enable|local_enable|write_enable)' /etc/vsftpd.conf
-
-ouss ALL=(ALL) NOPASSWD: APACHE_CONF, FTP_CONF
-```
-
-- **Explications** :  
-  - `APACHE_CONF` autorise `/usr/bin/cat` sur tous les fichiers `.conf` présents dans `/etc/apache2/sites-available/`.  
-  - `FTP_CONF` autorise un `grep` précis sur `/etc/vsftpd.conf`.  
-  - `NOPASSWD:` signifie que l’utilisateur `ouss` n’a pas besoin de saisir son mot de passe pour ces commandes.  
-  - **Attention** : vérifiez bien les chemins exacts sur votre distribution (`which cat`, `which grep`).
-
-### b) Accès total (optionnel)
-
-Si vous voulez donner tous les droits sudo à un utilisateur (pour qu’il puisse installer, configurer, etc.) ou un groupe, définissez-lui une règle `ALL=(ALL) NOPASSWD:ALL` :
-
-```bash
-user ALL=(ALL) NOPASSWD: ALL
-%group% ALL=(ALL) NOPASSWD: ALL
+user ALL=(ALL) NOPASSWD: APACHE_CONF
 ```
 
 ---
 
-## 3. Configuration du script
+## **4. Utilisation**
 
-### a) Variables importantes
-
-- Dans votre script principal (`main.py` par exemple), ajustez la variable `hostname` pour pointer vers **l’adresse IP** ou le **nom de domaine** de la machine distante.  
-- Assurez-vous également que l’**utilisateur** et le **mot de passe** fournis dans le script correspondent à ceux configurés sur la machine distante.
-
-### b) Structure des fichiers
-
-Vous devez disposer de **deux fichiers** principaux (à la racine de votre projet) :  
-1. **`sshpackagemanager.py`** : contient toutes les classes (SSHPackageManager, WebManager, FTPManager, LDAPManager, LinuxUserManager, etc.).  
-2. **`main.py`** : contient la logique de menus, d’authentification et les appels de méthodes.
-
----
-
-## 4. Lancement du script
-
-1. **Ouvrez un terminal** (ou console).  
-2. Placez-vous dans le répertoire contenant vos fichiers Python :  
+### a) Préparer la machine locale
+1. **Cloner le dépôt GitHub** :
    ```bash
-   cd /chemin/vers/mon-projet
+   git clone https://github.com/OussBth/Python4SRC2.git
    ```
-3. Exécutez le script principal :  
+2. **Accéder au répertoire** :
+   ```bash
+   cd Python4SRC2
+   ```
+
+### b) Lancer le script
+1. Exécuter le script principal :
    ```bash
    python main.py
    ```
-   ou  
-   ```bash
-   python3 main.py
-   ```
-4. **Saisissez** l’identifiant et le mot de passe SSH de la machine distante lorsqu’il vous le demande.  
-5. **Naviguez** dans les menus et testez les fonctionnalités (installation de paquets, lecture de config, etc.).
+2. Fournir les informations SSH :
+   - Adresse IP ou nom d'hôte.
+   - Nom d'utilisateur et mot de passe SSH.
+3. Naviguer dans les menus pour :
+   - Installer des paquets.
+   - Configurer Apache, FTP ou LDAP.
+   - Gérer les utilisateurs Linux.
 
 ---
 
-## 5. Notes et conseils
+## **5. Fonctionnalités en détail**
 
-- **Sécurité** :  
-  - Évitez de donner le droit `NOPASSWD: ALL` à des utilisateurs non fiables.  
-  - Restreignez au maximum les commandes autorisées en `sudoers` (principe du moindre privilège).  
-- **Dépannage** :  
-  - Si le script **bloque** lors de la demande de mot de passe, vérifiez que vous l’exécutez dans un **vrai terminal** (et non via l’IDE) pour que `getpass` fonctionne correctement.  
-- **Tests** :  
-  - Vérifiez manuellement les commandes sous `sudo` si vous n’êtes pas sûr (par exemple : `sudo cat /etc/apache2/sites-available/default.conf`).
+### a) Gestion des paquets
+- **Installation** :
+  ```bash
+  sudo apt-get install -y <nom_du_paquet>
+  ```
+- **Suppression** :
+  ```bash
+  sudo apt-get remove -y <nom_du_paquet>
+  ```
+- **Vérification** :
+  ```bash
+  dpkg -l | grep <nom_du_paquet>
+  ```
+
+### b) Apache
+- Ajout d'un site virtuel avec un port personnalisé.
+- Activation et rechargement automatique du service Apache.
+
+### c) FTP (vsftpd)
+- Configuration des paramètres comme `anonymous_enable`, `local_enable` et `write_enable`.
+
+### d) OpenLDAP
+- Installation et configuration non-interactive via `debconf-set-selections`.
+
+### e) Gestion des utilisateurs Linux
+- Création avec home directory :
+  ```bash
+  sudo useradd -m <nom_utilisateur>
+  ```
+- Modification de mot de passe :
+  ```bash
+  echo '<nom_utilisateur>:<mot_de_passe>' | sudo chpasswd
+  ```
 
 ---
 
-### Contact
+## **6. Sécurité**
 
-Pour toute question ou problème, n’hésitez pas à ouvrir une **issue** ou à me contacter directement. Bon scripting !
+- Limitez les privilèges d'accès en configurant le fichier sudoers.
+- N'utilisez pas `NOPASSWD: ALL` sauf si nécessaire.
+- Assurez-vous que les ports SSH sont sécurisés et que seuls les utilisateurs autorisés peuvent se connecter.
+
+---
+
+## **7. Dépannage**
+
+### Problèmes courants
+1. **SSH échoue** :
+   - Vérifiez l'adresse IP et les informations d'identification.
+   - Assurez-vous que le service SSH est actif sur la machine distante.
+2. **Commandes sudo refusées** :
+   - Vérifiez les règles dans `/etc/sudoers`.
+
+---
+
+## **8. Contribution**
+
+- Les contributions sont les bienvenues ! Veuillez soumettre vos pull requests ou signaler des problèmes dans la section [Issues](https://github.com/OussBth/Python4SRC2/issues).
+
+---
+
+## **9. Licence**
+
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+---
