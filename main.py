@@ -146,24 +146,20 @@ def ftp_menu(ftp_manager, is_admin):
 def ldap_menu(ldap_manager, is_admin):
     while True:
         print("\n[ MENU LDAP ]")
-        # Propositions pour un menu plus clair
         if is_admin:
             print("1. Installer & configurer OpenLDAP (non-interactif)")
-            print("2. Reconfigurer OpenLDAP (changer suffixe, mot de passe, etc.)")
+            print("2. Reconfigurer OpenLDAP (changer domaine, org, mot de passe)")
             print("3. Ajouter un utilisateur LDAP")
-        print("4. Lister les utilisateurs LDAP")
-        print("5. Retour au menu principal")
+            print("4. Lister les utilisateurs LDAP")
+            print("5. Supprimer la configuration OpenLDAP")
+        print("6. Retour au menu principal")
 
         choice = input("Sélectionnez une option : ")
 
         if choice == "1" and is_admin:
-            # Appel d'une méthode qui fait à la fois:
-            # 1) debconf-set-selections
-            # 2) apt-get install slapd ldap-utils
-            # 3) dpkg-reconfigure -f noninteractive slapd
-            domain = input("Entrez le suffixe LDAP (ex: dc=example,dc=com) : ").strip()
+            domain = input("Entrez le nom de domaine LDAP (ex: example.com) : ").strip()
             if not domain:
-                domain = "dc=example,dc=com"
+                domain = "example.com"
             org = input("Entrez le nom de l'organisation (ex: ExampleOrg) : ").strip()
             if not org:
                 org = "ExampleOrg"
@@ -171,51 +167,46 @@ def ldap_menu(ldap_manager, is_admin):
             if not admin_pass:
                 admin_pass = "admin"
 
-            ldap_manager.install_and_configure_ldap(
-                domain=domain,
-                org_name=org,
-                admin_password=admin_pass
-            )
+            ldap_manager.install_and_configure_ldap_via_script(domain, org, admin_pass)
 
         elif choice == "2" and is_admin:
-            # Cette option correspondrait à la méthode "configure_ldap"
-            # pour reconfigurer SANS réinstaller
-            domain = input("Entrez le nouveau suffixe LDAP (ex: dc=example,dc=com) : ").strip()
+            domain = input("Entrez le nouveau domaine LDAP (ex: example.com) : ").strip()
             if not domain:
-                domain = "dc=example,dc=com"
-            org = input("Entrez le nouveau nom de l'organisation : ").strip()
+                domain = "example.com"
+            org = input("Entrez le nouveau nom de l'organisation (ex: ExampleOrg) : ").strip()
             if not org:
                 org = "ExampleOrg"
             admin_pass = input("Entrez le nouveau mot de passe admin LDAP : ").strip()
             if not admin_pass:
                 admin_pass = "admin"
 
-            ldap_manager.configure_ldap(
-                domain=domain,
-                org_name=org,
-                admin_password=admin_pass
-            )
+            ldap_manager.configure_ldap(domain=domain, org_name=org, admin_password=admin_pass)
 
         elif choice == "3" and is_admin:
-            # Ajouter un utilisateur LDAP
             user_cn = input("Nom (cn) de l'utilisateur à ajouter : ").strip()
-            base_dn = input("Suffixe LDAP où créer l'utilisateur (ex: dc=example,dc=com) : ").strip()
-            if not base_dn:
-                base_dn = "dc=example,dc=com"
-            ldap_manager.add_ldap_user(user_cn, base_dn)
+            domain = input("Domaine LDAP (ex: example.com) : ").strip()
+            if not domain:
+                domain = "example.com"
+            ldap_manager.add_ldap_user(user_cn, domain)
 
-        elif choice == "4":
-            # Lister les utilisateurs
-            base_dn = input("Suffixe LDAP pour lister les utilisateurs (ex: dc=example,dc=com) : ").strip()
-            if not base_dn:
-                base_dn = "dc=example,dc=com"
-            ldap_manager.list_ldap_users(base_dn)
+        elif choice == "4" and is_admin:
+            domain = input("Domaine LDAP (ex: example.com) : ").strip()
+            if not domain:
+                domain = "example.com"
+            ldap_manager.list_ldap_users(domain)
 
-        elif choice == "5":
-            # Retour au menu principal
+        elif choice == "5" and is_admin:
+            confirmation = input("Êtes-vous sûr de vouloir PURGER OpenLDAP ? (yes/no) : ").lower()
+            if confirmation == "yes":
+                ldap_manager.remove_ldap_config()
+            else:
+                print("[INFO] Suppression annulée.")
+
+        elif choice == "6":
             break
         else:
             print("[ERREUR] Choix invalide ou accès refusé.")
+
 
 def linux_user_menu(user_manager, is_admin):
     """
@@ -229,13 +220,14 @@ def linux_user_menu(user_manager, is_admin):
             print("2. Supprimer un utilisateur")
             print("3. Changer un mot de passe")
         print("4. Lister les groupes (d'un utilisateur)")
-        print("5. Retour au menu principal")
+        print("5 Lister les utilisateurs")
+        print("6. Retour au menu principal")
 
         choice = input("Sélectionnez une option : ")
 
         if choice == "1" and is_admin:
             username = input("Nom de l'utilisateur : ")
-            password = getpass("Mot de passe : ")
+            password = input("Mot de passe : ")
             user_manager.create_user(username, password)
         elif choice == "2" and is_admin:
             username = input("Nom de l'utilisateur : ")
@@ -246,12 +238,14 @@ def linux_user_menu(user_manager, is_admin):
                 print("[INFO] Suppression annulée.")
         elif choice == "3" and is_admin:
             username = input("Nom de l'utilisateur : ")
-            new_password = getpass("Nouveau mot de passe : ")
+            new_password = input("Nouveau mot de passe : ")
             user_manager.change_password(username, new_password)
         elif choice == "4":
             username = input("Nom de l'utilisateur (laisser vide pour lister tous les groupes) : ")
             user_manager.list_groups(username)
         elif choice == "5":
+            user_manager.list_users()
+        elif choice == "6":
             break
         else:
             print("[ERREUR] Choix invalide ou accès refusé.")
@@ -320,7 +314,7 @@ def authenticate_remote(hostname):
 
 if __name__ == "__main__":
     # Hostname / IP de la machine distante
-    hostname = "192.168.8.132"
+    hostname = "192.168.8.131"
 
     # On effectue l'authentification SSH
     ssh_user, ssh_pass, is_admin = authenticate_remote(hostname)

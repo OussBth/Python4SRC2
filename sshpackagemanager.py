@@ -1,4 +1,6 @@
 import paramiko
+import os
+import tempfile
 
 class SSHPackageManager:
     """
@@ -232,46 +234,121 @@ class FTPManager(SSHPackageManager):
         else:
             print(output)
 
+###TRAITEMENT LDAP
+
+def domain_to_dn(domain: str) -> str:
+    """
+    Convertit un domaine style 'example.com'
+    en 'dc=example,dc=com'.
+    """
+    parts = domain.split('.')
+    dn_parts = [f"dc={p}" for p in parts]
+    return ",".join(dn_parts)
+
+
 
 class LDAPManager(SSHPackageManager):
     """
-    Gère l'installation et la configuration d'OpenLDAP,
+    Gère l'installation, la configuration, la purge d'OpenLDAP,
     ainsi que l'ajout et la liste d'utilisateurs dans l'annuaire.
     """
 
-    def install_and_configure_ldap(self, domain="dc=example,dc=com", org_name="ExampleOrg", admin_password="admin"):
-        """
-        Installation et configuration non-interactive d'OpenLDAP.
-        1) Définir les réponses Debconf (suffixe, mdp, backend...),
-        2) Installer slapd + ldap-utils,
-        3) Reconfigurer (dpkg-reconfigure) pour finaliser.
-        """
-        print("[INFO] Installation et configuration non-interactive d'OpenLDAP...")
 
-        # 1) Définir toutes les sélections Debconf avant l’installation
-        debconf_commands = [
+
+    def install_and_configure_ldap_via_script(self, domain, org_name, admin_password):
+        """
+        Génère un script Bash complet pour installer et configurer OpenLDAP
+        en non-interactif, puis l'envoie et l'exécute sur la machine distante.
+        'domain' est un string type 'example.com'.
+        """
+
+        script_content = f"""#!/bin/bash
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+echo "=== Script d'installation et de configuration OpenLDAP ==="
+echo "Domaine LDAP : {domain}"
+echo "Organisation : {org_name}"
+echo "Mot de passe Admin : {admin_password}"
+
+# Debconf selections
+sudo debconf-set-selections <<< 'slapd slapd/no_configuration boolean false'
+sudo debconf-set-selections <<< 'slapd slapd/internal/adminpw password {admin_password}'
+sudo debconf-set-selections <<< 'slapd slapd/internal/generated_adminpw password {admin_password}'
+
+sudo debconf-set-selections <<< 'slapd slapd/password1 password {admin_password}'
+sudo debconf-set-selections <<< 'slapd slapd/password2 password {admin_password}'
+sudo debconf-set-selections <<< 'slapd slapd/domain string {domain}'
+sudo debconf-set-selections <<< 'slapd shared/organization string {org_name}'
+sudo debconf-set-selections <<< 'slapd slapd/backend select mdb'
+sudo debconf-set-selections <<< 'slapd slapd/purge_database boolean true'
+sudo debconf-set-selections <<< 'slapd slapd/move_old_database boolean true'
+sudo debconf-set-selections <<< 'slapd slapd/allow_ldap_v2 boolean false'
+
+# Installation
+sudo apt-get update
+sudo apt-get install -y slapd ldap-utils
+
+# Éventuellement reconfigurer si besoin
+# sudo dpkg-reconfigure -f noninteractive slapd
+
+echo "=== Fin du script d'installation OpenLDAP ==="
+"""
+
+        # 1) Écriture locale d'un script .sh temporaire
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.sh') as tmpfile:
+            tmpfile.write(script_content)
+            local_script_path = tmpfile.name
+
+        print(f"[INFO] Script Bash créé localement : {local_script_path}")
+
+        # 2) Copie du script vers la machine distante
+        remote_script_path = "/tmp/config_openldap.sh"
+        sftp = self.client.open_sftp()
+        sftp.put(local_script_path, remote_script_path)
+        sftp.close()
+
+        # 3) Exécution sur la machine distante
+        self.execute_command(f"sudo chmod +x {remote_script_path}")
+        self.execute_command(f"sudo dos2unix {remote_script_path}")
+
+        self.execute_command(f"ls -l {remote_script_path}")
+        self.execute_command("ls -l /tmp")
+
+        output, error = self.execute_command(f"sudo /bin/bash {remote_script_path}")
+        if error.strip():
+            print(f"[ERREUR] lors de l'exécution du script : {error}")
+        else:
+            print(output)
+
+        # Nettoyage du script local
+        os.remove(local_script_path)
+
+        print("[INFO] Script d'installation LDAP exécuté avec succès (ou erreurs signalées ci-dessus).")
+
+
+    def configure_ldap(self, domain, org_name, admin_password):
+        """
+        Reconfigure slapd en mode non interactif
+        (changements de domaine/organisation/mot de passe).
+        'domain' est un string type 'example.com'.
+        """
+        print("[INFO] Configuration d'OpenLDAP via dpkg-reconfigure (non-interactive).")
+
+        debconf_cmds = [
             f"sudo debconf-set-selections <<< 'slapd slapd/password1 password {admin_password}'",
             f"sudo debconf-set-selections <<< 'slapd slapd/password2 password {admin_password}'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/domain string {domain.replace('dc=', '').replace(',dc=', '.')}'",
+            f"sudo debconf-set-selections <<< 'slapd slapd/domain string {domain}'",
             f"sudo debconf-set-selections <<< 'slapd shared/organization string {org_name}'",
             f"sudo debconf-set-selections <<< 'slapd slapd/backend select mdb'",
             f"sudo debconf-set-selections <<< 'slapd slapd/purge_database boolean true'",
             f"sudo debconf-set-selections <<< 'slapd slapd/move_old_database boolean true'",
             f"sudo debconf-set-selections <<< 'slapd slapd/allow_ldap_v2 boolean false'"
         ]
-        for cmd in debconf_commands:
+
+        for cmd in debconf_cmds:
             self.execute_command(cmd)
 
-        # 2) Installer slapd et ldap-utils en mode non-interactif
-        self.execute_command("sudo apt-get update")
-        output, error = self.execute_command("sudo apt-get install -y slapd ldap-utils")
-        if error.strip():
-            print(f"[ERREUR] lors de l'installation d'OpenLDAP : {error}")
-        else:
-            print(output)
-
-        # 3) (Optionnel) On peut refaire un dpkg-reconfigure pour être sûr
-        #    que toutes les options sont bien appliquées
         reconfigure_output, reconfigure_err = self.execute_command(
             "sudo dpkg-reconfigure -f noninteractive slapd"
         )
@@ -280,45 +357,22 @@ class LDAPManager(SSHPackageManager):
         else:
             print(reconfigure_output)
 
-    def configure_ldap(self, domain="dc=example,dc=com", org_name="ExampleOrg", admin_password="admin"):
-        """
-        Configure slapd de manière non interactive,
-        via debconf-set-selections et dpkg-reconfigure.
-        """
-        print("[INFO] Configuration d'OpenLDAP via dpkg-reconfigure (non-interactive).")
 
-        debconf_commands = [
-            f"sudo debconf-set-selections <<< 'slapd slapd/password1 password {admin_password}'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/password2 password {admin_password}'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/domain string {domain.replace('dc=', '').replace(',dc=', '.')}'",
-            f"sudo debconf-set-selections <<< 'slapd shared/organization string {org_name}'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/backend select mdb'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/purge_database boolean true'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/move_old_database boolean true'",
-            f"sudo debconf-set-selections <<< 'slapd slapd/allow_ldap_v2 boolean false'"
-        ]
-        for cmd in debconf_commands:
-            self.execute_command(cmd)
-
-        reconfigure_output, reconfigure_err = self.execute_command("sudo dpkg-reconfigure -f noninteractive slapd")
-        if reconfigure_err.strip():
-            print(f"[ERREUR] lors de la configuration : {reconfigure_err}")
-        else:
-            print(reconfigure_output)
-
-    def add_ldap_user(self, user_cn, base_dn="dc=example,dc=com"):
+    def add_ldap_user(self, user_cn, domain):
         """
-        Crée un utilisateur simple (inetOrgPerson) via un fichier LDIF temporaire,
-        puis l'ajoute via ldapadd.
+        Ajoute un utilisateur simple (inetOrgPerson).
+        L'utilisateur saisit 'example.com', qu'on convertit en 'dc=example,dc=com'.
         """
-        print(f"[INFO] Ajout de l'utilisateur {user_cn} dans le DN {base_dn}...")
+        base_dn = domain_to_dn(domain)  # ex: "dc=example,dc=com"
+        print(f"[INFO] Ajout de l'utilisateur {user_cn} dans {base_dn}...")
+
         ldif_content = f"""
-        dn: cn={user_cn},ou=People,{base_dn}
-        objectClass: inetOrgPerson
-        sn: {user_cn}
-        cn: {user_cn}
-        userPassword: secret
-        """
+dn: cn={user_cn},ou=People,{base_dn}
+objectClass: inetOrgPerson
+sn: {user_cn}
+cn: {user_cn}
+userPassword: secret
+"""
         tmp_ldif_path = f"/tmp/{user_cn}.ldif"
         self.execute_command(f"echo \"{ldif_content}\" > {tmp_ldif_path}")
 
@@ -326,16 +380,18 @@ class LDAPManager(SSHPackageManager):
             f"sudo ldapadd -x -D 'cn=admin,{base_dn}' -w admin -f {tmp_ldif_path}"
         )
         if error.strip():
-            print(f"[ERREUR] lors de l'ajout de l'utilisateur LDAP : {error}")
+            print(f"[ERREUR] lors de l'ajout de l'utilisateur LDAP '{user_cn}' : {error}")
         else:
             print(output)
 
-    def list_ldap_users(self, base_dn="dc=example,dc=com"):
+
+    def list_ldap_users(self, domain="example.com"):
         """
-        Fait un ldapsearch basique dans ou=People,
-        et affiche le champ 'cn'.
+        Liste les utilisateurs présents dans 'ou=People,dc=example,dc=com'.
         """
-        print(f"[INFO] Listing des utilisateurs dans ou=People,{base_dn}...")
+        base_dn = domain_to_dn(domain)
+        print(f"[INFO] Listing des utilisateurs sous 'ou=People,{base_dn}'...")
+
         output, error = self.execute_command(
             f"ldapsearch -x -LLL -b 'ou=People,{base_dn}' cn"
         )
@@ -344,6 +400,39 @@ class LDAPManager(SSHPackageManager):
         else:
             print(output)
 
+
+    def remove_ldap_config(self):
+        """
+        Supprime la configuration OpenLDAP (slapd) de la machine distante :
+        1) apt-get remove --purge -y slapd
+        2) rm -rf /etc/ldap/slapd.d /var/lib/ldap
+        3) (optionnel) apt-get autoremove -y
+        """
+        print("[INFO] Suppression/Purge de la configuration OpenLDAP...")
+
+        # 1) Purge du paquet slapd
+        output, error = self.execute_command("sudo apt-get remove --purge -y slapd")
+        if error.strip():
+            print(f"[ERREUR] lors de la purge du paquet slapd : {error}")
+        else:
+            print(output)
+
+        # 2) Nettoyage des dossiers
+        # on supprime /etc/ldap/slapd.d et /var/lib/ldap
+        output, error = self.execute_command("sudo rm -rf /etc/ldap/slapd.d /var/lib/ldap")
+        if error.strip():
+            print(f"[ERREUR] lors du nettoyage /etc/ldap/slapd.d et /var/lib/ldap : {error}")
+        else:
+            print(output)
+
+        # 3) (Optionnel) apt-get autoremove
+        output, error = self.execute_command("sudo apt-get autoremove -y")
+        if error.strip():
+            print(f"[ERREUR] lors du autoremove : {error}")
+        else:
+            print(output)
+
+        print("[INFO] Configuration OpenLDAP supprimée (purge) avec succès.")
 
 class LinuxUserManager(SSHPackageManager):
     """
@@ -354,8 +443,8 @@ class LinuxUserManager(SSHPackageManager):
     def create_user(self, username, password):
         print(f"[INFO] Création de l'utilisateur {username}.")
         # On vérifie si l'utilisateur existe déjà (id -u <username>)
-        out, err = self.execute_command(f"id -u {username}")
-        if "no such user" not in err.strip() and out.strip():
+        output, error = self.execute_command(f"id -u {username}")
+        if "no such user" not in error.strip() and output.strip():
             print(f"[WARNING] L'utilisateur {username} existe déjà.")
             return
 
@@ -368,35 +457,35 @@ class LinuxUserManager(SSHPackageManager):
             print(create_out)
 
         # On définit le mot de passe via chpasswd
-        passwd_out, passwd_err = self.execute_command(f"echo '{username}:{password}' | sudo chpasswd")
-        if passwd_err.strip():
-            print(f"[ERREUR] Impossible de changer le mot de passe : {passwd_err}")
+        output, error = self.execute_command(f"echo '{username}:{password}' | sudo chpasswd")
+        if error.strip():
+            print(f"[ERREUR] Impossible de changer le mot de passe : {error}")
         else:
             print("[INFO] Mot de passe défini avec succès.")
 
     def delete_user(self, username):
         print(f"[INFO] Suppression de l'utilisateur {username}.")
-        out, err = self.execute_command(f"id -u {username}")
-        if "no such user" in err.strip():
+        output, error = self.execute_command(f"id -u {username}")
+        if "no such user" in error.strip():
             print(f"[WARNING] L'utilisateur {username} n'existe pas.")
             return
 
-        remove_out, remove_err = self.execute_command(f"sudo userdel -r {username}")
-        if remove_err.strip():
-            print(f"[ERREUR] lors de la suppression de l'utilisateur : {remove_err}")
+        output, error = self.execute_command(f"sudo userdel -r {username}")
+        if error.strip():
+            print(f"[ERREUR] lors de la suppression de l'utilisateur : {error}")
         else:
-            print(remove_out)
+            print(output)
 
     def change_password(self, username, new_password):
         print(f"[INFO] Changement du mot de passe de {username}.")
-        out, err = self.execute_command(f"id -u {username}")
-        if "no such user" in err.strip():
+        output, error = self.execute_command(f"id -u {username}")
+        if "no such user" in error.strip():
             print(f"[WARNING] L'utilisateur {username} n'existe pas.")
             return
 
-        passwd_out, passwd_err = self.execute_command(f"echo '{username}:{new_password}' | sudo chpasswd")
-        if passwd_err.strip():
-            print(f"[ERREUR] Impossible de changer le mot de passe : {passwd_err}")
+        output, error = self.execute_command(f"echo '{username}:{new_password}' | sudo chpasswd")
+        if error.strip():
+            print(f"[ERREUR] Impossible de changer le mot de passe : {error}")
         else:
             print("[INFO] Mot de passe modifié avec succès.")
 
@@ -419,3 +508,15 @@ class LinuxUserManager(SSHPackageManager):
                 print(f"[ERREUR] : {error}")
             else:
                 print(output)
+
+    def list_users(self):
+        """
+        On liste tout les utilisateurs (cut -d: -f1 /etc/user).
+        """
+
+        print("[INFO] Liste des utilisateurs :")
+        output, error = self.execute_command("id -u")
+        if error.strip():
+            print(f"[ERREUR] : {error}")
+        else:
+            print(output)
