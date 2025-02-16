@@ -7,7 +7,8 @@ from sshpackagemanager import (
     WebManager,
     FTPManager,
     LDAPManager,
-    LinuxUserManager
+    LinuxUserManager,
+    NetworkManager
 )
 
 
@@ -251,7 +252,55 @@ def linux_user_menu(user_manager, is_admin):
             print("[ERREUR] Choix invalide ou accès refusé.")
 
 
-def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_user_manager, is_admin):
+def network_menu(network_manager, is_admin):
+    """
+    Menu dédié à la gestion des interfaces réseau et du DNS.
+    Certaines actions (activation, désactivation, configuration) nécessitent des droits admin.
+    """
+    while True:
+        print("\n[ MENU Réseau et DNS ]")
+        print("1. Lister les interfaces réseau")
+        if is_admin:
+            print("2. Activer une interface")
+            print("3. Désactiver une interface")
+            print("4. Configurer une IP statique")
+            print("5. Configurer les DNS")
+        print("6. Retour au menu principal")
+
+        choice = input("Sélectionnez une option : ")
+
+        if choice == "1":
+            network_manager.list_interfaces()
+        elif choice == "2" and is_admin:
+            print("[INFO] Interfaces disponibles :")
+            network_manager.list_interfaces()
+            interface = input("Entrez le nom de l'interface à activer : ")
+            network_manager.enable_interface(interface)
+        elif choice == "3" and is_admin:
+            print("[INFO] Interfaces disponibles :")
+            network_manager.list_interfaces()
+            interface = input("Entrez le nom de l'interface à désactiver : ")
+            network_manager.disable_interface(interface)
+        elif choice == "4" and is_admin:
+            print("[INFO] Interfaces disponibles :")
+            network_manager.list_interfaces()
+            interface = input("Entrez le nom de l'interface à configurer : ")
+            ip = input("Entrez l'adresse IP : ")
+            netmask = input("Entrez le masque de sous-réseau (ex: 255.255.255.0) : ")
+            gateway = input("Entrez la passerelle par défaut : ")
+            network_manager.configure_static_ip(interface, ip, netmask, gateway)
+        elif choice == "5" and is_admin:
+            primary_dns = input("Entrez l'adresse du DNS primaire : ")
+            secondary_dns = input("Entrez l'adresse du DNS secondaire (laisser vide si aucun) : ")
+            secondary_dns = secondary_dns if secondary_dns.strip() != "" else None
+            network_manager.set_dns(primary_dns, secondary_dns)
+        elif choice == "6":
+            break
+        else:
+            print("[ERREUR] Choix invalide ou accès refusé.")
+
+
+def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_user_manager, network_manager, is_admin):
     """
     Menu principal qui redirige vers les sous-menus
     (paquets, web, ftp, ldap, users).
@@ -263,7 +312,8 @@ def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_use
         print("3. Gestion du serveur FTP")
         print("4. Gestion du serveur LDAP")
         print("5. Gestion des utilisateurs Linux")
-        print("6. Quitter")
+        print("6. Gestion du réseau et DNS")
+        print("7. Quitter")
 
         choice = input("Sélectionnez une option : ")
 
@@ -278,6 +328,8 @@ def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_use
         elif choice == "5":
             linux_user_menu(linux_user_manager, is_admin)
         elif choice == "6":
+            network_menu(network_manager, is_admin)
+        elif choice == "7":
             print("[INFO] Fermeture du programme.")
             break
         else:
@@ -328,6 +380,7 @@ if __name__ == "__main__":
     ftp_manager = FTPManager(hostname, ssh_user, ssh_pass)
     ldap_manager = LDAPManager(hostname, ssh_user, ssh_pass)
     linux_user_manager = LinuxUserManager(hostname, ssh_user, ssh_pass)
+    network_manager = NetworkManager(hostname, ssh_user, ssh_pass)
 
     try:
         # Lance le menu principal
@@ -337,6 +390,7 @@ if __name__ == "__main__":
             ftp_manager,
             ldap_manager,
             linux_user_manager,
+            network_manager,
             is_admin
         )
     finally:
@@ -346,4 +400,5 @@ if __name__ == "__main__":
         ftp_manager.close_connection()
         ldap_manager.close_connection()
         linux_user_manager.close_connection()
+        network_manager.close_connection()
         print("[INFO] Connexions SSH fermées.")

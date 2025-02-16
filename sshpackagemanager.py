@@ -489,6 +489,15 @@ class LinuxUserManager(SSHPackageManager):
         else:
             print("[INFO] Mot de passe modifié avec succès.")
 
+    def add_group(self, username, group_name):
+        print(f"[INFO] Ajout des groupes pour l'utilisateur {username}.")
+        output, error = self.execute_command(f"sudo groupadd {username} {group_name}")
+        if error.strip():
+            print(f"[ERREUR] Impossible d'ajouter le groupe : {error}")
+        else:
+            print("[INFO] Groupe ajouté avec succès")
+
+
     def list_groups(self, username):
         """
         Si un username est fourni, on liste ses groupes (id -nG <username>).
@@ -520,3 +529,106 @@ class LinuxUserManager(SSHPackageManager):
             print(f"[ERREUR] : {error}")
         else:
             print(output)
+
+
+class NetworkManager(SSHPackageManager):
+    """
+    Gère les configurations réseau et le DNS de la machine distante.
+    """
+
+    def list_interfaces(self):
+        """
+        Liste les interfaces réseau disponibles.
+        """
+        print("[INFO] Récupération des interfaces réseau...")
+        command = "ip link show"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de la récupération des interfaces : {error}")
+        else:
+            print(output)
+
+    def get_interface_status(self, interface):
+        """
+        Affiche l'état et la configuration de l'interface spécifiée.
+        """
+        print(f"[INFO] Récupération de l'état de l'interface {interface}...")
+        command = f"ip addr show {interface}"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de la récupération de l'état de {interface} : {error}")
+        else:
+            print(output)
+
+    def enable_interface(self, interface):
+        """
+        Active l'interface réseau spécifiée.
+        """
+        print(f"[INFO] Activation de l'interface {interface}...")
+        command = f"sudo ip link set {interface} up"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de l'activation de {interface} : {error}")
+        else:
+            print(f"[INFO] Interface {interface} activée.")
+
+    def disable_interface(self, interface):
+        """
+        Désactive l'interface réseau spécifiée.
+        """
+        print(f"[INFO] Désactivation de l'interface {interface}...")
+        command = f"sudo ip link set {interface} down"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de la désactivation de {interface} : {error}")
+        else:
+            print(f"[INFO] Interface {interface} désactivée.")
+
+    def configure_static_ip(self, interface, ip, netmask, gateway):
+        """
+        Configure une adresse IP statique sur l'interface.
+        Remarque : la conversion du netmask (ex: 255.255.255.0) en préfixe CIDR est gérée par une méthode utilitaire.
+        """
+        print(f"[INFO] Configuration de l'IP statique sur {interface}...")
+        # Supprime d'abord toute configuration IP existante sur l'interface
+        self.execute_command(f"sudo ip addr flush dev {interface}")
+
+        prefix = self.netmask_to_prefix(netmask)
+        # Ajoute la nouvelle IP
+        command = f"sudo ip addr add {ip}/{prefix} dev {interface}"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de la configuration de l'IP sur {interface} : {error}")
+        else:
+            print(f"[INFO] {interface} configurée avec l'IP {ip}/{prefix}.")
+
+        # Configure la route par défaut via le gateway
+        output, error = self.execute_command(f"sudo ip route add default via {gateway} dev {interface}")
+        if error.strip():
+            print(f"[ERREUR] lors de la configuration de la route par défaut : {error}")
+        else:
+            print(f"[INFO] Route par défaut configurée via {gateway}.")
+
+    def netmask_to_prefix(self, netmask):
+        """
+        Convertit un netmask (ex: 255.255.255.0) en préfixe CIDR (ex: 24).
+        """
+        return sum(bin(int(octet)).count("1") for octet in netmask.split("."))
+
+    def set_dns(self, primary_dns, secondary_dns=None):
+        """
+        Configure les serveurs DNS en modifiant le fichier /etc/resolv.conf.
+        Attention : sur certaines distributions ce fichier peut être géré automatiquement par un service.
+        """
+        print("[INFO] Configuration du DNS...")
+        resolv_content = f"nameserver {primary_dns}\n"
+        if secondary_dns:
+            resolv_content += f"nameserver {secondary_dns}\n"
+        # On écrase le fichier /etc/resolv.conf avec la nouvelle configuration
+        command = f"echo '{resolv_content}' | sudo tee /etc/resolv.conf"
+        output, error = self.execute_command(command)
+        if error.strip():
+            print(f"[ERREUR] lors de la configuration du DNS : {error}")
+        else:
+            print(f"[INFO] DNS configuré avec {primary_dns}" + (f" et {secondary_dns}" if secondary_dns else "") + ".")
+
