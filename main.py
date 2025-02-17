@@ -3,7 +3,6 @@ import os
 from getpass import getpass
 import logging
 import sys
-import curses
 from colored_formatter import ColoredFormatter
 
 # Configuration du logging pour les logs techniques (avec date/heure)
@@ -12,10 +11,13 @@ handler.setFormatter(ColoredFormatter("%(asctime)s - %(levelname)s - %(message)s
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 
-# Fonction utilitaire pour afficher les menus avec couleurs, sans date/heure (en mode non-curses)
+# Fonction utilitaire pour afficher les menus avec couleurs, sans date/heure
 def menu_print(message, level="INFO"):
     color = ColoredFormatter.COLORS.get(level, ColoredFormatter.RESET)
     print(f"{color}{message}{ColoredFormatter.RESET}")
+
+def clear_screen():
+    os.system("cls" if os.name == "nt" else "clear")
 
 from sshpackagemanager import (
     SSHPackageManager,
@@ -26,13 +28,11 @@ from sshpackagemanager import (
     NetworkManager
 )
 
-# Vos fonctions de sous-menus restent inchangées (elles utilisent input() et menu_print)
+# Vos fonctions de sous-menus (inchangées) :
 def package_menu(package_manager, is_admin):
-    """
-    Menu dédié à la gestion des paquets classiques.
-    """
     while True:
-        menu_print("\n[ MENU Paquets Classiques ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU Paquets Classiques ]", level="INFO")
         if is_admin:
             menu_print("1. Installer des paquets", level="INFO")
             menu_print("2. Désinstaller un paquet", level="INFO")
@@ -57,13 +57,12 @@ def package_menu(package_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def web_menu(web_manager, is_admin):
-    """
-    Menu dédié à la gestion Web (Apache).
-    """
     while True:
-        menu_print("\n[ MENU Web ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU Web ]", level="INFO")
         if is_admin:
             menu_print("1. Installer Apache2 + PHP", level="INFO")
             menu_print("2. Configurer Apache2 (Nouveau site)", level="INFO")
@@ -111,9 +110,7 @@ def web_menu(web_manager, is_admin):
                 try:
                     site_index = int(input("Sélectionnez le site à supprimer (numéro) : ")) - 1
                     if 0 <= site_index < len(sites):
-                        confirmation = input(
-                            f"Êtes-vous sûr de vouloir supprimer le site '{sites[site_index]}' ? (yes/no) : "
-                        ).lower()
+                        confirmation = input(f"Êtes-vous sûr de vouloir supprimer le site '{sites[site_index]}' ? (yes/no) : ").lower()
                         if confirmation == "yes":
                             web_manager.delete_apache_site(sites[site_index])
                             menu_print(f"[INFO] Site '{sites[site_index]}' supprimé avec succès.", level="INFO")
@@ -129,13 +126,12 @@ def web_menu(web_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def ftp_menu(ftp_manager, is_admin):
-    """
-    Menu dédié au serveur FTP.
-    """
     while True:
-        menu_print("\n[ MENU FTP ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU FTP ]", level="INFO")
         if is_admin:
             menu_print("1. Installer le serveur FTP (vsftpd)", level="INFO")
             menu_print("2. Configurer le serveur FTP", level="INFO")
@@ -157,10 +153,12 @@ def ftp_menu(ftp_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def ldap_menu(ldap_manager, is_admin):
     while True:
-        menu_print("\n[ MENU LDAP ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU LDAP ]", level="INFO")
         if is_admin:
             menu_print("1. Installer & configurer OpenLDAP (non-interactif)", level="INFO")
             menu_print("2. Reconfigurer OpenLDAP (changer domaine, org, mot de passe)", level="INFO")
@@ -219,13 +217,12 @@ def ldap_menu(ldap_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def linux_user_menu(user_manager, is_admin):
-    """
-    Menu de gestion des utilisateurs Linux.
-    """
     while True:
-        menu_print("\n[ MENU Utilisateurs Linux ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU Utilisateurs Linux ]", level="INFO")
         if is_admin:
             menu_print("1. Créer un utilisateur", level="INFO")
             menu_print("2. Supprimer un utilisateur", level="INFO")
@@ -259,13 +256,12 @@ def linux_user_menu(user_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def network_menu(network_manager, is_admin):
-    """
-    Menu dédié à la gestion des interfaces réseau et DNS.
-    """
     while True:
-        menu_print("\n[ MENU Réseau et DNS ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU Réseau et DNS ]", level="INFO")
         menu_print("1. Lister les interfaces réseau", level="INFO")
         if is_admin:
             menu_print("2. Activer une interface", level="INFO")
@@ -277,7 +273,6 @@ def network_menu(network_manager, is_admin):
             menu_print("8. Reset les DNS", level="INFO")
             menu_print("9. Lister les DNS actuels", level="INFO")
             menu_print("10. Retour au menu principal", level="INFO")
-
         choice = input("Sélectionnez une option : ")
         if choice == "1":
             network_manager.list_interfaces_details()
@@ -320,13 +315,12 @@ def network_menu(network_manager, is_admin):
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_user_manager, network_manager, is_admin):
-    """
-    Menu principal qui redirige vers les sous-menus.
-    """
     while True:
-        menu_print("\n[ MENU PRINCIPAL ]", level="INFO")
+        clear_screen()
+        menu_print("[ MENU PRINCIPAL ]", level="INFO")
         menu_print("1. Gestion des paquets classiques", level="INFO")
         menu_print("2. Gestion des paquets web (Apache)", level="INFO")
         menu_print("3. Gestion du serveur FTP", level="INFO")
@@ -353,12 +347,9 @@ def main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_use
             break
         else:
             logger.error("[ERREUR] Choix invalide.")
+        input("Appuyez sur Entrée pour continuer...")
 
 def authenticate_remote(hostname):
-    """
-    Fonction qui demande un login/password SSH, tente une connexion Paramiko,
-    puis vérifie si l'utilisateur est dans un groupe admin/sudo.
-    """
     logger.info("[AUTH] Authentification requise...")
     user = input("Nom d'utilisateur SSH : ")
     password = getpass("Mot de passe SSH : ")
@@ -383,87 +374,15 @@ def authenticate_remote(hostname):
     is_admin = ('sudo' in groups) or ('admin' in groups)
     return user, password, is_admin
 
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
-
-# Fonction principale utilisant curses pour afficher le menu en haut de l'écran
-def main_curses(stdscr, package_manager, web_manager, ftp_manager, ldap_manager, linux_user_manager, network_manager, is_admin):
-    curses.curs_set(0)  # Masquer le curseur
-    stdscr.clear()
-    stdscr.refresh()
-
-    menu_height = 8  # Hauteur de la fenêtre de menu
-    menu_win = curses.newwin(menu_height, curses.COLS, 0, 0)
-    content_win = curses.newwin(curses.LINES - menu_height, curses.COLS, menu_height, 0)
-
-    main_menu_items = [
-        "1. Gestion des paquets classiques",
-        "2. Gestion des paquets web (Apache)",
-        "3. Gestion du serveur FTP",
-        "4. Gestion du serveur LDAP",
-        "5. Gestion des utilisateurs Linux",
-        "6. Gestion du réseau et DNS",
-        "7. Quitter"
-    ]
-
-    while True:
-        # Afficher le menu en haut
-        menu_win.clear()
-        for idx, item in enumerate(main_menu_items):
-            menu_win.addstr(idx, 1, item)
-        menu_win.box()
-        menu_win.refresh()
-
-        # Afficher la zone de saisie dans la fenêtre de contenu
-        content_win.clear()
-        content_win.addstr(1, 1, "Sélectionnez une option : ")
-        content_win.refresh()
-        choice = content_win.getstr(2, 1).decode("utf-8").strip()
-
-        if choice == "1":
-            curses.endwin()  # Quitter temporairement curses
-            package_menu(package_manager, is_admin)
-        elif choice == "2":
-            curses.endwin()
-            web_menu(web_manager, is_admin)
-        elif choice == "3":
-            curses.endwin()
-            ftp_menu(ftp_manager, is_admin)
-        elif choice == "4":
-            curses.endwin()
-            ldap_menu(ldap_manager, is_admin)
-        elif choice == "5":
-            curses.endwin()
-            linux_user_menu(linux_user_manager, is_admin)
-        elif choice == "6":
-            curses.endwin()
-            network_menu(network_manager, is_admin)
-        elif choice == "7":
-            break
-        else:
-            content_win.addstr(4, 1, "[ERREUR] Choix invalide. Appuyez sur une touche pour continuer...")
-            content_win.refresh()
-            content_win.getch()
-
-        # Réinitialiser curses après l'appel d'un sous-menu
-        stdscr = curses.initscr()
-        curses.curs_set(0)
-        menu_win = curses.newwin(menu_height, curses.COLS, 0, 0)
-        content_win = curses.newwin(curses.LINES - menu_height, curses.COLS, menu_height, 0)
-
-    curses.endwin()
-
 if __name__ == "__main__":
     clear_screen()
     hostname = input("Entrez le nom d'hôte ou l'adresse IP de la machine distante : ")
 
-    # Authentification SSH
     ssh_user, ssh_pass, is_admin = authenticate_remote(hostname)
     if not ssh_user or not ssh_pass:
         logger.error("[ERREUR] Impossible de continuer sans authentification correcte.")
         exit(1)
 
-    # Création des objets managers
     package_manager = SSHPackageManager(hostname, ssh_user, ssh_pass)
     web_manager = WebManager(hostname, ssh_user, ssh_pass)
     ftp_manager = FTPManager(hostname, ssh_user, ssh_pass)
@@ -471,10 +390,8 @@ if __name__ == "__main__":
     linux_user_manager = LinuxUserManager(hostname, ssh_user, ssh_pass)
     network_manager = NetworkManager(hostname, ssh_user, ssh_pass)
 
-    # Lancer l'interface curses pour le menu principal
-    curses.wrapper(lambda stdscr: main_curses(stdscr, package_manager, web_manager, ftp_manager,
-                                               ldap_manager, linux_user_manager, network_manager, is_admin))
-    # Fermeture des connexions SSH
+    main_menu(package_manager, web_manager, ftp_manager, ldap_manager, linux_user_manager, network_manager, is_admin)
+
     package_manager.close_connection()
     web_manager.close_connection()
     ftp_manager.close_connection()
