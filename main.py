@@ -201,6 +201,7 @@ def ldap_menu(ldap_manager, is_admin):
             admin_pass = input("Entrez le mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.add_ou(ou_name, domain, admin_pass)
 
+
         elif choice == "8" and is_admin:
             ou_name = input("Nom de l'OU à supprimer : ").strip()
             domain = input("Domaine LDAP (ex: example.com) : ").strip() or "example.com"

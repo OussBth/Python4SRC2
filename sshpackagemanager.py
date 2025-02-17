@@ -344,6 +344,7 @@ ou: {ou_name}" | sudo ldapadd -x -D 'cn=admin,{base_dn}' -w {admin_password}"""
         self.run_command(delete_ou_cmd,
                          success_message=f"[INFO] OU {ou_name} supprimée avec succès.")
 
+
     def list_ous(self, domain="example.com"):
         """
         Liste toutes les unités organisationnelles (OU) présentes dans le domaine.
