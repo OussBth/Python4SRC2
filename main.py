@@ -164,13 +164,13 @@ def ldap_menu(ldap_manager, is_admin):
         if choice == "1" and is_admin:
             domain = input("Entrez le nom de domaine LDAP (ex: example.com) : ").strip() or "example.com"
             org = input("Entrez le nom de l'organisation (ex: ExampleOrg) : ").strip() or "ExampleOrg"
-            admin_pass = input("Entrez le mot de passe admin LDAP : ").strip() or "admin"
+            admin_pass = getpass("Entrez le mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.install_and_configure_ldap_via_script(domain, org, admin_pass)
 
         elif choice == "2" and is_admin:
             domain = input("Entrez le nouveau domaine LDAP (ex: example.com) : ").strip() or "example.com"
             org = input("Entrez le nouveau nom de l'organisation (ex: ExampleOrg) : ").strip() or "ExampleOrg"
-            admin_pass = input("Entrez le nouveau mot de passe admin LDAP : ").strip() or "admin"
+            admin_pass = getpass("Entrez le nouveau mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.configure_ldap(domain, org, admin_pass)
 
         elif choice == "3" and is_admin:
@@ -192,20 +192,20 @@ def ldap_menu(ldap_manager, is_admin):
         elif choice == "6" and is_admin:
             user_cn = input("Nom (cn) de l'utilisateur à supprimer : ").strip()
             domain = input("Domaine LDAP (ex: example.com) : ").strip() or "example.com"
-            admin_pass = input("Entrez le mot de passe admin LDAP : ").strip() or "admin"
+            admin_pass = getpass("Entrez le mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.delete_ldap_user(user_cn, domain, admin_pass)
 
         elif choice == "7" and is_admin:
             ou_name = input("Nom de l'OU à ajouter : ").strip()
             domain = input("Domaine LDAP (ex: example.com) : ").strip() or "example.com"
-            admin_pass = input("Entrez le mot de passe admin LDAP : ").strip() or "admin"
+            admin_pass = getpass("Entrez le mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.add_ou(ou_name, domain, admin_pass)
 
 
         elif choice == "8" and is_admin:
             ou_name = input("Nom de l'OU à supprimer : ").strip()
             domain = input("Domaine LDAP (ex: example.com) : ").strip() or "example.com"
-            admin_pass = input("Entrez le mot de passe admin LDAP : ").strip() or "admin"
+            admin_pass = getpass("Entrez le mot de passe admin LDAP : ").strip() or "admin"
             ldap_manager.remove_ou(ou_name, domain, admin_pass)
 
         elif choice == "9" and is_admin:
@@ -238,7 +238,7 @@ def linux_user_menu(user_manager, is_admin):
 
         if choice == "1" and is_admin:
             username = input("Nom de l'utilisateur : ")
-            password = input("Mot de passe : ")
+            password = getpass("Mot de passe : ")
             user_manager.create_user(username, password)
         elif choice == "2" and is_admin:
             username = input("Nom de l'utilisateur : ")
@@ -249,7 +249,7 @@ def linux_user_menu(user_manager, is_admin):
                 print("[INFO] Suppression annulée.")
         elif choice == "3" and is_admin:
             username = input("Nom de l'utilisateur : ")
-            new_password = input("Nouveau mot de passe : ")
+            new_password = getpass("Nouveau mot de passe : ")
             user_manager.change_password(username, new_password)
         elif choice == "4":
             username = input("Nom de l'utilisateur (laisser vide pour lister tous les groupes) : ")
@@ -354,7 +354,7 @@ def authenticate_remote(hostname):
     """
     print("[AUTH] Authentification requise...")
     user = input("Nom d'utilisateur SSH : ")
-    password = input("Mot de passe SSH : ")
+    password = getpass("Mot de passe SSH : ")
 
     temp_client = paramiko.SSHClient()
     temp_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

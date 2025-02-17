@@ -1,0 +1,12 @@
+# Dossier de configuration de IDEs (PyCharm, IntelliJ, etc.)
+.idea/
+
+# Environnement virtuel
+venv/
+*.venv/
+
+# Dossiers de cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
