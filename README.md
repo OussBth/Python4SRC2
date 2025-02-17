@@ -20,6 +20,9 @@ Ce projet Python permet de gérer à distance l'installation, la configuration, 
   - Création et suppression d'utilisateurs.
   - Modification des mots de passe.
   - Liste des groupes utilisateurs.
+- **Gestion du réseau** :
+  - Configuration des interfaces réseau.
+  - Configuration des DNS.
 
 ---
 
@@ -50,7 +53,7 @@ Ce projet Python permet de gérer à distance l'installation, la configuration, 
 
 ```
 Python4SRC2/
-├── sshpackagemanager.py    # Classes pour gérer les paquets, Apache, FTP, LDAP, utilisateurs.
+├── sshpackagemanager.py    # Classes pour gérer les paquets, Apache, FTP, LDAP, utilisateurs, réseau.
 ├── main.py                 # Menu principal et logique du script.
 ├── README.md               # Documentation du projet.
 ```
@@ -96,6 +99,7 @@ user ALL=(ALL) NOPASSWD: APACHE_CONF
    - Installer des paquets.
    - Configurer Apache, FTP ou LDAP.
    - Gérer les utilisateurs Linux.
+   - Configurer le réseau et les DNS.
 
 ---
 
@@ -134,6 +138,10 @@ user ALL=(ALL) NOPASSWD: APACHE_CONF
   ```bash
   echo '<nom_utilisateur>:<mot_de_passe>' | sudo chpasswd
   ```
+
+### f) Gestion du réseau
+- Configuration des interfaces réseau.
+- Configuration des DNS.
 
 ---
 
