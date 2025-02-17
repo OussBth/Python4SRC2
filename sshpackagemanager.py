@@ -9,79 +9,63 @@ class SSHPackageManager:
     """
 
     def __init__(self, hostname, username, password):
-        # On stocke les informations de connexion (hôte, user, mdp)
         self.hostname = hostname
         self.username = username
         self.password = password
 
-        # On crée un client SSH Paramiko
         self.client = paramiko.SSHClient()
-        # On autorise l'ajout automatique de la clé de l'hôte distant
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # On se connecte à la machine distante
         self.client.connect(hostname, username=username, password=password)
 
     def execute_command(self, command):
         """
-        Méthode utilitaire pour exécuter une commande sur la machine distante.
-        On force un environnement non-interactif (DEBIAN_FRONTEND=noninteractive).
+        Exécute une commande sur la machine distante en forçant un environnement non-interactif.
         """
         command = f"export TERM=xterm DEBIAN_FRONTEND=noninteractive && {command}"
         stdin, stdout, stderr = self.client.exec_command(command)
-        # On récupère la sortie standard et la sortie d'erreur
         return stdout.read().decode(), stderr.read().decode()
 
-    def install_single_package(self, package):
+    def run_command(self, command, success_message=None, print_output=True):
         """
-        Installe un seul paquet (apt-get install -y <package>).
+        Exécute une commande via execute_command, gère et affiche les erreurs.
+        - success_message : message personnalisé affiché en cas de succès.
+        - print_output : si True, affiche la sortie standard si aucun success_message n'est fourni.
+        Retourne la sortie standard en cas de succès, sinon None.
         """
-        print(f"[INFO] Installation du paquet {package}...")
-        output, error = self.execute_command(f"sudo apt-get install -y {package}")
+        output, error = self.execute_command(command)
         if error.strip():
-            print(f"[ERREUR] lors de l'installation de {package} : {error}")
+            print(f"[ERREUR] lors de l'exécution de '{command}': {error}")
+            return None
         else:
-            print(output)
+            if success_message:
+                print(success_message)
+            elif print_output:
+                print(output)
+            return output
+
+    def install_single_package(self, package):
+        print(f"[INFO] Installation du paquet {package}...")
+        self.run_command(f"sudo apt-get install -y {package}",
+                         success_message=f"[INFO] Installation du paquet {package} terminée.")
 
     def install_packages(self, package_name):
-        """
-        Installe plusieurs paquets à la fois (séparés par un espace).
-        1) apt-get update
-        2) apt-get install pour chaque paquet
-        """
         packages = package_name.split()
-
-        # Mise à jour de la liste des paquets
-        output, error = self.execute_command("sudo apt-get update")
-        if error.strip():
-            print(f"[ERREUR] lors du apt-get update : {error}")
-        else:
-            print(output)
-
-        # Installation de chaque paquet
+        self.run_command("sudo apt-get update",
+                         success_message="[INFO] Mise à jour de la liste des paquets terminée.")
         for package in packages:
             self.install_single_package(package)
 
     def remove_package(self, package_name):
-        """
-        Supprime un paquet (apt-get remove -y)
-        puis on exécute apt-get autoremove -y pour nettoyer.
-        """
         print(f"[INFO] Suppression du paquet {package_name}...")
-        output, error = self.execute_command(f"sudo apt-get remove -y {package_name}")
-        if error.strip():
-            print(f"[ERREUR] lors de la suppression de {package_name} : {error}")
-        else:
-            print(output)
-            # Nettoyage
-            self.execute_command("sudo apt-get autoremove -y")
+        self.run_command(f"sudo apt-get remove -y {package_name}",
+                         success_message=f"[INFO] Suppression du paquet {package_name} terminée.")
+        self.run_command("sudo apt-get autoremove -y",
+                         success_message="[INFO] Nettoyage des paquets inutilisés terminé.")
 
     def verify_package(self, package_name):
-        """
-        Vérifie si un paquet est installé (dpkg -l | grep <package>).
-        """
         print(f"[INFO] Vérification de l'installation de {package_name} avec dpkg...")
-        output, error = self.execute_command(f"dpkg -l | grep {package_name}")
-        if output.strip():
+        output = self.run_command(f"dpkg -l | grep {package_name}", print_output=False)
+        if output and output.strip():
             print(f"[OK] Le paquet {package_name} est installé.")
             return True
         else:
@@ -89,26 +73,14 @@ class SSHPackageManager:
             return False
 
     def update_package(self, package_name):
-        """
-        Met à jour un paquet s'il est déjà installé.
-        Sinon, indique qu'il n'est pas installé.
-        """
         if self.verify_package(package_name):
             print(f"[INFO] Mise à jour du paquet {package_name}...")
-            output, error = self.execute_command(
-                f"sudo apt-get update && sudo apt-get install --only-upgrade -y {package_name}"
-            )
-            if error.strip():
-                print(f"[ERREUR] lors de la mise à jour de {package_name}: {error}")
-            else:
-                print(output)
+            self.run_command(f"sudo apt-get update && sudo apt-get install --only-upgrade -y {package_name}",
+                             success_message=f"[INFO] Mise à jour du paquet {package_name} terminée.")
         else:
             print(f"[INFO] Le paquet {package_name} n'est pas installé, aucune mise à jour nécessaire.")
 
     def close_connection(self):
-        """
-        Ferme la connexion SSH proprement.
-        """
         self.client.close()
         print("[INFO] Connexion SSH fermée.")
 
@@ -116,83 +88,54 @@ class SSHPackageManager:
 class WebManager(SSHPackageManager):
     """
     Gère les actions spécifiques au serveur web (Apache2).
-    Hérite de SSHPackageManager pour la connexion SSH et l'exécution de commandes.
     """
 
     def configure_apache2(self, site_name, port=80):
-        """
-        Crée un répertoire pour le site, génère un fichier de config .conf,
-        active le site et recharge Apache.
-        """
         print("[INFO] Configuration du service Apache2...")
-        commandes = [
-            f"sudo mkdir -p /var/www/html/{site_name}",
-            f"echo '<h1>Bienvenue sur le site {site_name}</h1>' | sudo tee /var/www/html/{site_name}/index.html",
-            (
-                "sudo bash -c 'cat > /etc/apache2/sites-available/"
-                f"{site_name}.conf <<EOF\n"
-                f"<VirtualHost *:{port}>\n"
-                f"    ServerAdmin webmaster@localhost\n"
-                f"    DocumentRoot /var/www/html/{site_name}\n"
-                f"    ErrorLog ${{APACHE_LOG_DIR}}/error.log\n"
-                f"    CustomLog ${{APACHE_LOG_DIR}}/access.log combined\n"
-                f"</VirtualHost>\n"
-                f"EOF'"
-            ),
-            f"sudo a2ensite {site_name}",
-            "sudo systemctl reload apache2"
-        ]
-
-        for cmd in commandes:
-            output, error = self.execute_command(cmd)
-            if error.strip():
-                print(f"[ERREUR] : {error}")
-            else:
-                print(output)
+        self.run_command(f"sudo mkdir -p /var/www/html/{site_name}",
+                         success_message=f"[INFO] Répertoire /var/www/html/{site_name} créé.")
+        self.run_command(f"echo '<h1>Bienvenue sur le site {site_name}</h1>' | sudo tee /var/www/html/{site_name}/index.html",
+                         success_message=f"[INFO] Page d'accueil pour {site_name} créée.")
+        config_cmd = (
+            "sudo bash -c 'cat > /etc/apache2/sites-available/"
+            f"{site_name}.conf <<EOF\n"
+            f"<VirtualHost *:{port}>\n"
+            f"    ServerAdmin webmaster@localhost\n"
+            f"    DocumentRoot /var/www/html/{site_name}\n"
+            f"    ErrorLog ${{APACHE_LOG_DIR}}/error.log\n"
+            f"    CustomLog ${{APACHE_LOG_DIR}}/access.log combined\n"
+            f"</VirtualHost>\n"
+            f"EOF'"
+        )
+        self.run_command(config_cmd,
+                         success_message=f"[INFO] Fichier de configuration pour {site_name} créé.")
+        self.run_command(f"sudo a2ensite {site_name}",
+                         success_message=f"[INFO] Site {site_name} activé.")
+        self.run_command("sudo systemctl reload apache2",
+                         success_message="[INFO] Apache rechargé.")
 
     def list_apache_sites(self):
-        """
-        Liste les fichiers .conf dans /etc/apache2/sites-available
-        pour déterminer les sites existants.
-        """
         print("[INFO] Récupération des sites Apache disponibles...")
-        output, error = self.execute_command("ls /etc/apache2/sites-available | grep '.conf'")
-        if error.strip():
-            print(f"[ERREUR] : {error}")
-            return []
-        else:
+        output = self.run_command("ls /etc/apache2/sites-available | grep '.conf'", print_output=False)
+        if output is not None:
             sites = [line.replace('.conf', '') for line in output.splitlines()]
             return sites
+        return []
 
     def print_web_configuration(self, site_name):
-        """
-        Affiche le contenu du fichier de configuration du site <site_name>.
-        """
         print(f"[INFO] Affichage de la configuration pour le site : {site_name}")
-        output, error = self.execute_command(f"sudo /bin/cat /etc/apache2/sites-available/{site_name}.conf")
-        if error.strip():
-            print(f"[ERREUR] : {error}")
-        else:
-            print(output)
+        self.run_command(f"sudo /bin/cat /etc/apache2/sites-available/{site_name}.conf")
 
     def delete_apache_site(self, site_name):
-        """
-        Désactive le site, supprime le fichier .conf et le dossier du site,
-        puis recharge Apache.
-        """
         print(f"[INFO] Suppression du site Apache : {site_name}...")
-        commandes = [
-            f"sudo a2dissite {site_name}",
-            f"sudo rm -f /etc/apache2/sites-available/{site_name}.conf",
-            f"sudo rm -rf /var/www/html/{site_name}",
-            "sudo systemctl reload apache2"
-        ]
-        for cmd in commandes:
-            output, error = self.execute_command(cmd)
-            if error.strip():
-                print(f"[ERREUR] lors de l'exécution de la commande : {cmd}\n{error}")
-            else:
-                print(output)
+        self.run_command(f"sudo a2dissite {site_name}",
+                         success_message=f"[INFO] Site {site_name} désactivé.")
+        self.run_command(f"sudo rm -f /etc/apache2/sites-available/{site_name}.conf",
+                         success_message="[INFO] Fichier de configuration supprimé.")
+        self.run_command(f"sudo rm -rf /var/www/html/{site_name}",
+                         success_message="[INFO] Répertoire du site supprimé.")
+        self.run_command("sudo systemctl reload apache2",
+                         success_message="[INFO] Apache rechargé.")
 
 
 class FTPManager(SSHPackageManager):
@@ -201,51 +144,42 @@ class FTPManager(SSHPackageManager):
     """
 
     def configure_vsftpd(self, anonymous_enable, local_enable, write_enable):
-        """
-        Sauvegarde le fichier /etc/vsftpd.conf, puis modifie les lignes
-        anonymous_enable / local_enable / write_enable (même si elles sont commentées).
-        Ensuite redémarre vsftpd.
-        """
         print("[INFO] Configuration de vsftpd...")
-        commandes = [
-            "sudo cp /etc/vsftpd.conf /etc/vsftpd.conf.bak",
-            f"sudo sed -i 's/^#\\?anonymous_enable=.*/anonymous_enable={anonymous_enable.upper()}/' /etc/vsftpd.conf",
-            f"sudo sed -i 's/^#\\?local_enable=.*/local_enable={local_enable.upper()}/' /etc/vsftpd.conf",
-            f"sudo sed -i 's/^#\\?write_enable=.*/write_enable={write_enable.upper()}/' /etc/vsftpd.conf",
-            "sudo systemctl restart vsftpd"
-        ]
-
-        for cmd in commandes:
-            output, error = self.execute_command(cmd)
-            if error.strip():
-                print(f"[ERREUR] : {error}")
-            else:
-                print(output)
+        self.run_command("sudo cp /etc/vsftpd.conf /etc/vsftpd.conf.bak",
+                         success_message="[INFO] Sauvegarde du fichier vsftpd.conf effectuée.")
+        self.run_command(f"sudo sed -i 's/^#\\?anonymous_enable=.*/anonymous_enable={anonymous_enable.upper()}/' /etc/vsftpd.conf",
+                         success_message="[INFO] Configuration de anonymous_enable mise à jour.")
+        self.run_command(f"sudo sed -i 's/^#\\?local_enable=.*/local_enable={local_enable.upper()}/' /etc/vsftpd.conf",
+                         success_message="[INFO] Configuration de local_enable mise à jour.")
+        self.run_command(f"sudo sed -i 's/^#\\?write_enable=.*/write_enable={write_enable.upper()}/' /etc/vsftpd.conf",
+                         success_message="[INFO] Configuration de write_enable mise à jour.")
+        self.run_command("sudo systemctl restart vsftpd",
+                         success_message="[INFO] vsftpd redémarré.")
 
     def print_ftp_configuration(self):
-        """
-        Affiche les lignes qui correspondent à (anonymous_enable|local_enable|write_enable)
-        dans /etc/vsftpd.conf pour vérifier la config actuelle.
-        """
-        print("[INFO] Affichage des lignes modifiées dans la configuration FTP...")
-        output, error = self.execute_command("sudo /usr/bin/grep -E '^(anonymous_enable|local_enable|write_enable)' /etc/vsftpd.conf")
-        if error.strip():
-            print(f"[ERREUR] : {error}")
-        else:
-            print(output)
+        print("[INFO] Affichage de la configuration FTP...")
+        self.run_command("sudo /usr/bin/grep -E '^(anonymous_enable|local_enable|write_enable)' /etc/vsftpd.conf")
 
-###TRAITEMENT LDAP
 
 def domain_to_dn(domain: str) -> str:
     """
-    Convertit un domaine style 'example.com'
-    en 'dc=example,dc=com'.
+    Convertit un domaine (ex: 'example.com') en DN (ex: 'dc=example,dc=com').
     """
     parts = domain.split('.')
     dn_parts = [f"dc={p}" for p in parts]
     return ",".join(dn_parts)
 
 
+import tempfile
+import os
+
+def domain_to_dn(domain: str) -> str:
+    """
+    Convertit un domaine (ex: "example.com") en DN (ex: "dc=example,dc=com").
+    """
+    parts = domain.split('.')
+    dn_parts = [f"dc={p}" for p in parts]
+    return ",".join(dn_parts)
 
 class LDAPManager(SSHPackageManager):
     """
@@ -253,15 +187,13 @@ class LDAPManager(SSHPackageManager):
     ainsi que l'ajout et la liste d'utilisateurs dans l'annuaire.
     """
 
-
-
     def install_and_configure_ldap_via_script(self, domain, org_name, admin_password):
         """
         Génère un script Bash complet pour installer et configurer OpenLDAP
         en non-interactif, puis l'envoie et l'exécute sur la machine distante.
-        'domain' est un string type 'example.com'.
+        'domain' est un string type 'example.com'. L'unité 'People' est créée
+        à la fin de l'installation.
         """
-
         script_content = f"""#!/bin/bash
 set -e
 export DEBIAN_FRONTEND=noninteractive
@@ -294,7 +226,6 @@ sudo apt-get install -y slapd ldap-utils
 
 echo "=== Fin du script d'installation OpenLDAP ==="
 """
-
         # 1) Écriture locale d'un script .sh temporaire
         with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.sh') as tmpfile:
             tmpfile.write(script_content)
@@ -309,29 +240,32 @@ echo "=== Fin du script d'installation OpenLDAP ==="
         sftp.close()
 
         # 3) Exécution sur la machine distante
-        self.execute_command(f"sudo chmod +x {remote_script_path}")
-        self.execute_command(f"sudo dos2unix {remote_script_path}")
-
-        self.execute_command(f"ls -l {remote_script_path}")
-        self.execute_command("ls -l /tmp")
-
-        output, error = self.execute_command(f"sudo /bin/bash {remote_script_path}")
-        if error.strip():
-            print(f"[ERREUR] lors de l'exécution du script : {error}")
-        else:
-            print(output)
-
+        self.run_command(f"sudo chmod +x {remote_script_path}",
+                         success_message=f"[INFO] Permissions modifiées pour {remote_script_path}.")
+        self.run_command(f"sudo dos2unix {remote_script_path}",
+                         success_message=f"[INFO] Conversion du script {remote_script_path} effectuée.")
+        self.run_command(f"ls -l {remote_script_path}")
+        self.run_command("ls -l /tmp")
+        output = self.run_command(f"sudo /bin/bash {remote_script_path}",
+                         success_message="[INFO] Script d'installation OpenLDAP exécuté.")
         # Nettoyage du script local
         os.remove(local_script_path)
 
-        print("[INFO] Script d'installation LDAP exécuté avec succès (ou erreurs signalées ci-dessus).")
+        # Création de l'OU People
+        base_dn = domain_to_dn(domain)
+        create_ou_cmd = f"""echo "dn: ou=People,{base_dn}
+objectClass: organizationalUnit
+ou: People" | sudo ldapadd -x -D 'cn=admin,{base_dn}' -w {admin_password}"""
+        self.run_command(create_ou_cmd,
+                         success_message="[INFO] OU People créée avec succès.")
 
+        print("[INFO] Script d'installation LDAP exécuté avec succès (ou erreurs signalées ci-dessus).")
 
     def configure_ldap(self, domain, org_name, admin_password):
         """
-        Reconfigure slapd en mode non interactif
-        (changements de domaine/organisation/mot de passe).
-        'domain' est un string type 'example.com'.
+        Reconfigure slapd en mode non interactif (changements de domaine/organisation/mot de passe).
+        'domain' est un string type 'example.com'. Après la reconfiguration, l'unité 'People'
+        est créée si elle n'existe pas.
         """
         print("[INFO] Configuration d'OpenLDAP via dpkg-reconfigure (non-interactive).")
 
@@ -345,18 +279,18 @@ echo "=== Fin du script d'installation OpenLDAP ==="
             f"sudo debconf-set-selections <<< 'slapd slapd/move_old_database boolean true'",
             f"sudo debconf-set-selections <<< 'slapd slapd/allow_ldap_v2 boolean false'"
         ]
-
         for cmd in debconf_cmds:
-            self.execute_command(cmd)
+            self.run_command(cmd)
+        self.run_command("sudo dpkg-reconfigure -f noninteractive slapd",
+                         success_message="[INFO] Configuration d'OpenLDAP terminée.")
 
-        reconfigure_output, reconfigure_err = self.execute_command(
-            "sudo dpkg-reconfigure -f noninteractive slapd"
-        )
-        if reconfigure_err.strip():
-            print(f"[ERREUR] lors de la configuration : {reconfigure_err}")
-        else:
-            print(reconfigure_output)
-
+        # Création de l'OU People après reconfiguration
+        base_dn = domain_to_dn(domain)
+        create_ou_cmd = f"""echo "dn: ou=People,{base_dn}
+objectClass: organizationalUnit
+ou: People" | sudo ldapadd -x -D 'cn=admin,{base_dn}' -w {admin_password}"""
+        self.run_command(create_ou_cmd,
+                         success_message="[INFO] OU People créée avec succès après reconfiguration.")
 
     def add_ldap_user(self, user_cn, domain):
         """
@@ -374,16 +308,49 @@ cn: {user_cn}
 userPassword: secret
 """
         tmp_ldif_path = f"/tmp/{user_cn}.ldif"
-        self.execute_command(f"echo \"{ldif_content}\" > {tmp_ldif_path}")
+        self.run_command(f"echo \"{ldif_content}\" > {tmp_ldif_path}",
+                         success_message=f"[INFO] Fichier LDIF pour {user_cn} créé.")
+        self.run_command(f"sudo ldapadd -x -D 'cn=admin,{base_dn}' -w admin -f {tmp_ldif_path}",
+                         success_message=f"[INFO] Utilisateur LDAP {user_cn} ajouté.")
 
-        output, error = self.execute_command(
-            f"sudo ldapadd -x -D 'cn=admin,{base_dn}' -w admin -f {tmp_ldif_path}"
-        )
-        if error.strip():
-            print(f"[ERREUR] lors de l'ajout de l'utilisateur LDAP '{user_cn}' : {error}")
-        else:
-            print(output)
+    def delete_ldap_user(self, user_cn, domain, admin_password):
+        """
+        Supprime un utilisateur LDAP dont le DN est 'cn=<user_cn>,ou=People,<base_dn>'.
+        """
+        base_dn = domain_to_dn(domain)
+        dn = f"cn={user_cn},ou=People,{base_dn}"
+        delete_cmd = f"sudo ldapdelete -x -D 'cn=admin,{base_dn}' -w {admin_password} '{dn}'"
+        self.run_command(delete_cmd,
+                         success_message=f"[INFO] Utilisateur {user_cn} supprimé avec succès.")
 
+    def add_ou(self, ou_name, domain, admin_password):
+        """
+        Ajoute une unité organisationnelle (OU) dans le domaine.
+        Le DN sera 'ou=<ou_name>,<base_dn>'.
+        """
+        base_dn = domain_to_dn(domain)
+        add_ou_cmd = f"""echo "dn: ou={ou_name},{base_dn}
+objectClass: organizationalUnit
+ou: {ou_name}" | sudo ldapadd -x -D 'cn=admin,{base_dn}' -w {admin_password}"""
+        self.run_command(add_ou_cmd,
+                         success_message=f"[INFO] OU {ou_name} créée avec succès.")
+
+    def remove_ou(self, ou_name, domain, admin_password):
+        """
+        Supprime l'unité organisationnelle (OU) spécifiée dans le domaine.
+        """
+        base_dn = domain_to_dn(domain)
+        delete_ou_cmd = f"sudo ldapdelete -x -D 'cn=admin,{base_dn}' -w {admin_password} 'ou={ou_name},{base_dn}'"
+        self.run_command(delete_ou_cmd,
+                         success_message=f"[INFO] OU {ou_name} supprimée avec succès.")
+
+    def list_ous(self, domain="example.com"):
+        """
+        Liste toutes les unités organisationnelles (OU) présentes dans le domaine.
+        """
+        base_dn = domain_to_dn(domain)
+        print(f"[INFO] Listing des OU sous {base_dn}...")
+        self.run_command(f"ldapsearch -x -LLL -b '{base_dn}' '(&(objectClass=organizationalUnit)(ou=*))' ou")
 
     def list_ldap_users(self, domain="example.com"):
         """
@@ -391,15 +358,7 @@ userPassword: secret
         """
         base_dn = domain_to_dn(domain)
         print(f"[INFO] Listing des utilisateurs sous 'ou=People,{base_dn}'...")
-
-        output, error = self.execute_command(
-            f"ldapsearch -x -LLL -b 'ou=People,{base_dn}' cn"
-        )
-        if error.strip():
-            print(f"[ERREUR] lors du listing des utilisateurs : {error}")
-        else:
-            print(output)
-
+        self.run_command(f"ldapsearch -x -LLL -b 'ou=People,{base_dn}' cn")
 
     def remove_ldap_config(self):
         """
@@ -409,226 +368,106 @@ userPassword: secret
         3) (optionnel) apt-get autoremove -y
         """
         print("[INFO] Suppression/Purge de la configuration OpenLDAP...")
-
-        # 1) Purge du paquet slapd
-        output, error = self.execute_command("sudo apt-get remove --purge -y slapd")
-        if error.strip():
-            print(f"[ERREUR] lors de la purge du paquet slapd : {error}")
-        else:
-            print(output)
-
-        # 2) Nettoyage des dossiers
-        # on supprime /etc/ldap/slapd.d et /var/lib/ldap
-        output, error = self.execute_command("sudo rm -rf /etc/ldap/slapd.d /var/lib/ldap")
-        if error.strip():
-            print(f"[ERREUR] lors du nettoyage /etc/ldap/slapd.d et /var/lib/ldap : {error}")
-        else:
-            print(output)
-
-        # 3) (Optionnel) apt-get autoremove
-        output, error = self.execute_command("sudo apt-get autoremove -y")
-        if error.strip():
-            print(f"[ERREUR] lors du autoremove : {error}")
-        else:
-            print(output)
-
+        self.run_command("sudo apt-get remove --purge -y slapd",
+                         success_message="[INFO] Package slapd purgé.")
+        self.run_command("sudo rm -rf /etc/ldap/slapd.d /var/lib/ldap",
+                         success_message="[INFO] Dossiers de configuration supprimés.")
+        self.run_command("sudo apt-get autoremove -y",
+                         success_message="[INFO] Nettoyage des paquets inutilisés terminé.")
         print("[INFO] Configuration OpenLDAP supprimée (purge) avec succès.")
-
 class LinuxUserManager(SSHPackageManager):
     """
-    Gère la création, suppression, modification de mot de passe
-    et la liste des groupes utilisateurs sous Linux.
+    Gère la création, suppression, modification de mot de passe et la gestion des groupes utilisateurs.
     """
 
     def create_user(self, username, password):
         print(f"[INFO] Création de l'utilisateur {username}.")
-        # On vérifie si l'utilisateur existe déjà (id -u <username>)
-        output, error = self.execute_command(f"id -u {username}")
-        if "no such user" not in error.strip() and output.strip():
+        output = self.run_command(f"id -u {username}", print_output=False)
+        if output and "no such user" not in output:
             print(f"[WARNING] L'utilisateur {username} existe déjà.")
             return
-
-        # Création de l'utilisateur avec home directory (-m)
-        create_out, create_err = self.execute_command(f"sudo useradd -m {username}")
-        if create_err.strip():
-            print(f"[ERREUR] Impossible de créer l'utilisateur : {create_err}")
-            return
-        else:
-            print(create_out)
-
-        # On définit le mot de passe via chpasswd
-        output, error = self.execute_command(f"echo '{username}:{password}' | sudo chpasswd")
-        if error.strip():
-            print(f"[ERREUR] Impossible de changer le mot de passe : {error}")
-        else:
-            print("[INFO] Mot de passe défini avec succès.")
+        self.run_command(f"sudo useradd -m {username}",
+                         success_message=f"[INFO] Utilisateur {username} créé.")
+        self.run_command(f"echo '{username}:{password}' | sudo chpasswd",
+                         success_message="[INFO] Mot de passe défini avec succès.")
 
     def delete_user(self, username):
         print(f"[INFO] Suppression de l'utilisateur {username}.")
-        output, error = self.execute_command(f"id -u {username}")
-        if "no such user" in error.strip():
+        output = self.run_command(f"id -u {username}", print_output=False)
+        if output is None:
             print(f"[WARNING] L'utilisateur {username} n'existe pas.")
             return
-
-        output, error = self.execute_command(f"sudo userdel -r {username}")
-        if error.strip():
-            print(f"[ERREUR] lors de la suppression de l'utilisateur : {error}")
-        else:
-            print(output)
+        self.run_command(f"sudo userdel -r {username}",
+                         success_message=f"[INFO] Utilisateur {username} supprimé.")
 
     def change_password(self, username, new_password):
         print(f"[INFO] Changement du mot de passe de {username}.")
-        output, error = self.execute_command(f"id -u {username}")
-        if "no such user" in error.strip():
+        output = self.run_command(f"id -u {username}", print_output=False)
+        if output is None:
             print(f"[WARNING] L'utilisateur {username} n'existe pas.")
             return
-
-        output, error = self.execute_command(f"echo '{username}:{new_password}' | sudo chpasswd")
-        if error.strip():
-            print(f"[ERREUR] Impossible de changer le mot de passe : {error}")
-        else:
-            print("[INFO] Mot de passe modifié avec succès.")
+        self.run_command(f"echo '{username}:{new_password}' | sudo chpasswd",
+                         success_message="[INFO] Mot de passe modifié avec succès.")
 
     def add_group(self, username, group_name):
-        print(f"[INFO] Ajout des groupes pour l'utilisateur {username}.")
-        output, error = self.execute_command(f"sudo groupadd {username} {group_name}")
-        if error.strip():
-            print(f"[ERREUR] Impossible d'ajouter le groupe : {error}")
-        else:
-            print("[INFO] Groupe ajouté avec succès")
-
+        print(f"[INFO] Ajout du groupe {group_name} pour l'utilisateur {username}.")
+        self.run_command(f"sudo groupadd {group_name}",
+                         success_message=f"[INFO] Groupe {group_name} ajouté.")
 
     def list_groups(self, username):
-        """
-        Si un username est fourni, on liste ses groupes (id -nG <username>).
-        Sinon, on liste tous les groupes (cut -d: -f1 /etc/group).
-        """
         if username:
             print(f"[INFO] Groupes de {username} :")
-            output, error = self.execute_command(f"id -nG {username}")
-            if error.strip():
-                print(f"[ERREUR] : {error}")
-            else:
-                print(output)
+            self.run_command(f"id -nG {username}")
         else:
             print("[INFO] Liste de tous les groupes :")
-            output, error = self.execute_command("cut -d: -f1 /etc/group")
-            if error.strip():
-                print(f"[ERREUR] : {error}")
-            else:
-                print(output)
+            self.run_command("cut -d: -f1 /etc/group")
 
     def list_users(self):
-        """
-        On liste tout les utilisateurs (cut -d: -f1 /etc/user).
-        """
-
         print("[INFO] Liste des utilisateurs :")
-        output, error = self.execute_command("id -u")
-        if error.strip():
-            print(f"[ERREUR] : {error}")
-        else:
-            print(output)
+        self.run_command("cut -d: -f1 /etc/passwd")
 
 
 class NetworkManager(SSHPackageManager):
     """
-    Gère les configurations réseau et le DNS de la machine distante.
+    Gère les configurations réseau et la configuration du DNS.
     """
 
     def list_interfaces(self):
-        """
-        Liste les interfaces réseau disponibles.
-        """
         print("[INFO] Récupération des interfaces réseau...")
-        command = "ip link show"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de la récupération des interfaces : {error}")
-        else:
-            print(output)
+        self.run_command("ip link show")
 
     def get_interface_status(self, interface):
-        """
-        Affiche l'état et la configuration de l'interface spécifiée.
-        """
         print(f"[INFO] Récupération de l'état de l'interface {interface}...")
-        command = f"ip addr show {interface}"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de la récupération de l'état de {interface} : {error}")
-        else:
-            print(output)
+        self.run_command(f"ip addr show {interface}")
 
     def enable_interface(self, interface):
-        """
-        Active l'interface réseau spécifiée.
-        """
         print(f"[INFO] Activation de l'interface {interface}...")
-        command = f"sudo ip link set {interface} up"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de l'activation de {interface} : {error}")
-        else:
-            print(f"[INFO] Interface {interface} activée.")
+        self.run_command(f"sudo ip link set {interface} up",
+                         success_message=f"[INFO] Interface {interface} activée.")
 
     def disable_interface(self, interface):
-        """
-        Désactive l'interface réseau spécifiée.
-        """
         print(f"[INFO] Désactivation de l'interface {interface}...")
-        command = f"sudo ip link set {interface} down"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de la désactivation de {interface} : {error}")
-        else:
-            print(f"[INFO] Interface {interface} désactivée.")
+        self.run_command(f"sudo ip link set {interface} down",
+                         success_message=f"[INFO] Interface {interface} désactivée.")
 
     def configure_static_ip(self, interface, ip, netmask, gateway):
-        """
-        Configure une adresse IP statique sur l'interface.
-        Remarque : la conversion du netmask (ex: 255.255.255.0) en préfixe CIDR est gérée par une méthode utilitaire.
-        """
         print(f"[INFO] Configuration de l'IP statique sur {interface}...")
-        # Supprime d'abord toute configuration IP existante sur l'interface
-        self.execute_command(f"sudo ip addr flush dev {interface}")
-
+        self.run_command(f"sudo ip addr flush dev {interface}",
+                         success_message=f"[INFO] Configuration IP de {interface} réinitialisée.")
         prefix = self.netmask_to_prefix(netmask)
-        # Ajoute la nouvelle IP
-        command = f"sudo ip addr add {ip}/{prefix} dev {interface}"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de la configuration de l'IP sur {interface} : {error}")
-        else:
-            print(f"[INFO] {interface} configurée avec l'IP {ip}/{prefix}.")
-
-        # Configure la route par défaut via le gateway
-        output, error = self.execute_command(f"sudo ip route add default via {gateway} dev {interface}")
-        if error.strip():
-            print(f"[ERREUR] lors de la configuration de la route par défaut : {error}")
-        else:
-            print(f"[INFO] Route par défaut configurée via {gateway}.")
+        self.run_command(f"sudo ip addr add {ip}/{prefix} dev {interface}",
+                         success_message=f"[INFO] {interface} configurée avec l'IP {ip}/{prefix}.")
+        self.run_command(f"sudo ip route add default via {gateway} dev {interface}",
+                         success_message=f"[INFO] Route par défaut configurée via {gateway}.")
 
     def netmask_to_prefix(self, netmask):
-        """
-        Convertit un netmask (ex: 255.255.255.0) en préfixe CIDR (ex: 24).
-        """
         return sum(bin(int(octet)).count("1") for octet in netmask.split("."))
 
     def set_dns(self, primary_dns, secondary_dns=None):
-        """
-        Configure les serveurs DNS en modifiant le fichier /etc/resolv.conf.
-        Attention : sur certaines distributions ce fichier peut être géré automatiquement par un service.
-        """
         print("[INFO] Configuration du DNS...")
         resolv_content = f"nameserver {primary_dns}\n"
         if secondary_dns:
             resolv_content += f"nameserver {secondary_dns}\n"
-        # On écrase le fichier /etc/resolv.conf avec la nouvelle configuration
         command = f"echo '{resolv_content}' | sudo tee /etc/resolv.conf"
-        output, error = self.execute_command(command)
-        if error.strip():
-            print(f"[ERREUR] lors de la configuration du DNS : {error}")
-        else:
-            print(f"[INFO] DNS configuré avec {primary_dns}" + (f" et {secondary_dns}" if secondary_dns else "") + ".")
-
+        self.run_command(command,
+                         success_message=f"[INFO] DNS configuré avec {primary_dns}" + (f" et {secondary_dns}" if secondary_dns else "") + ".")
