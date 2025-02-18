@@ -136,24 +136,42 @@ def ftp_menu(ftp_manager, is_admin):
             menu_print("1. Installer le serveur FTP (vsftpd)", level="INFO")
             menu_print("2. Configurer le serveur FTP", level="INFO")
         menu_print("3. Afficher la configuration FTP", level="INFO")
-        menu_print("4. Retour au menu principal", level="INFO")
+        if is_admin:
+            menu_print("4. Créer un dossier sur le serveur FTP", level="INFO")
+            menu_print("5. Envoyer un fichier sur le serveur FTP", level="INFO")
+        menu_print("6. Retour au menu principal", level="INFO")
 
         choice = input("Sélectionnez une option : ")
         if choice == "1" and is_admin:
             ftp_manager.install_single_package("vsftpd")
+
         elif choice == "2" and is_admin:
             menu_print("\nConfiguration du serveur FTP (vsftpd) :", level="INFO")
             anonymous_enable = input("Autoriser les connexions anonymes ? (yes/no) : ").strip().lower()
             local_enable = input("Autoriser les utilisateurs locaux ? (yes/no) : ").strip().lower()
             write_enable = input("Autoriser les écritures (upload) ? (yes/no) : ").strip().lower()
             ftp_manager.configure_vsftpd(anonymous_enable, local_enable, write_enable)
+
         elif choice == "3":
             ftp_manager.print_ftp_configuration()
-        elif choice == "4":
+
+        elif choice == "4" and is_admin:
+            directory = input("Entrez le chemin du dossier à créer (ex: /nouveau_dossier) : ")
+            ftp_manager.create_ftp_directory(directory)
+
+        elif choice == "5" and is_admin:
+            local_path = input("Chemin local du fichier à envoyer (ex: /home/user/fichier.txt) : ")
+            remote_path = input("Chemin distant (ex: /upload/fichier.txt) : ")
+            ftp_manager.store_ftp_file(local_path, remote_path)
+
+        elif choice == "6":
             break
         else:
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
+
         input("Appuyez sur Entrée pour continuer...")
+
+
 
 def ldap_menu(ldap_manager, is_admin):
     while True:

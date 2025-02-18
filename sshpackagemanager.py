@@ -162,9 +162,12 @@ class WebManager(SSHPackageManager):
                          success_message="[INFO] Apache rechargé.")
 
 
+import ftplib
+
 class FTPManager(SSHPackageManager):
     """
-    Gère la configuration du serveur FTP (vsftpd).
+    Gère la configuration du serveur FTP (vsftpd)
+    et ajoute des fonctions pour créer des dossiers et envoyer des fichiers via FTP.
     """
 
     def configure_vsftpd(self, anonymous_enable, local_enable, write_enable):
@@ -183,6 +186,31 @@ class FTPManager(SSHPackageManager):
     def print_ftp_configuration(self):
         logger.info("[INFO] Affichage de la configuration FTP...")
         self.run_command("sudo /usr/bin/grep -E '^(anonymous_enable|local_enable|write_enable)' /etc/vsftpd.conf")
+
+    def create_ftp_directory(self, directory):
+        """
+        Crée un dossier (directory) sur le serveur FTP en utilisant ftplib.
+        """
+        logger.info(f"[INFO] Création du dossier {directory} via FTP.")
+        try:
+            with ftplib.FTP(self.hostname, self.username, self.password) as ftp:
+                ftp.mkd(directory)
+            logger.info(f"[INFO] Dossier '{directory}' créé avec succès.")
+        except ftplib.all_errors as e:
+            logger.error(f"[ERREUR] Impossible de créer le dossier '{directory}': {str(e)}")
+
+    def store_ftp_file(self, local_path, remote_path):
+        """
+        Envoie (STOR) un fichier local vers le serveur FTP en utilisant ftplib.
+        """
+        logger.info(f"[INFO] Envoi du fichier '{local_path}' vers '{remote_path}'.")
+        try:
+            with ftplib.FTP(self.hostname, self.username, self.password) as ftp:
+                with open(local_path, 'rb') as f:
+                    ftp.storbinary(f"STOR {remote_path}", f)
+            logger.info(f"[INFO] Fichier '{local_path}' envoyé avec succès vers '{remote_path}'.")
+        except ftplib.all_errors as e:
+            logger.error(f"[ERREUR] Échec de l'envoi du fichier : {str(e)}")
 
 
 class LDAPManager(SSHPackageManager):
