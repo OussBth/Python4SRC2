@@ -59,6 +59,7 @@ def package_menu(package_manager, is_admin):
             logger.error("[ERREUR] Choix invalide ou accès refusé.")
         input("Appuyez sur Entrée pour continuer...")
 
+
 def web_menu(web_manager, is_admin):
     while True:
         clear_screen()

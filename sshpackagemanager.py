@@ -3,6 +3,7 @@ import os
 import tempfile
 import logging
 import re
+import ftplib
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,6 @@ class WebManager(SSHPackageManager):
                          success_message="[INFO] Apache rechargé.")
 
 
-import ftplib
 
 class FTPManager(SSHPackageManager):
     """
