@@ -19,7 +19,7 @@ def menu_print(message, level="INFO"):
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
-from sshpackagemanager import (
+from classes import (
     SSHPackageManager,
     WebManager,
     FTPManager,
