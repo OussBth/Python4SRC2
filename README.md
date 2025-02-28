@@ -1,26 +1,22 @@
 # **Python4SRC2 - Gestion des Services via SSH**
 
-Ce projet Python permet de gérer à distance l'installation, la configuration, et la maintenance de services sur une machine Linux via SSH. Il offre une interface en ligne de commande permettant de piloter :
+Ce projet Python permet d'administrer à distance une machine Linux via SSH. Il facilite l'installation, la configuration et la gestion de plusieurs services, notamment :
 
-- La gestion classique de paquets (installation, suppression, mise à jour, vérification)
-- La configuration et la gestion de sites web (Apache2 + PHP)
-- La gestion d'un serveur FTP (vsftpd)
-- L'installation et la configuration d'OpenLDAP (gestion d'utilisateurs LDAP et organisationnel)
-- La gestion des utilisateurs Linux (création, suppression, changement de mot de passe, gestion des groupes)
-- La configuration des interfaces réseau et des serveurs DNS
-
----
+- **Gestion des paquets** (installation, suppression, mise à jour, vérification)
+- **Administration des serveurs web** (Apache, Nginx, PHP)
+- **Gestion des serveurs FTP** (vsftpd)
+- **Administration LDAP** (OpenLDAP, gestion des utilisateurs et unités organisationnelles)
+- **Gestion des utilisateurs Linux** (ajout, suppression, modification de mot de passe, gestion des groupes)
+- **Configuration réseau** (interfaces réseau, IP statique/DHCP, DNS)
 
 ## **1. Prérequis**
 
 ### a) Environnement et dépendances
 - **Python 3** doit être installé sur la machine locale.
-- Dépendances Python :
-  - [paramiko](https://www.paramiko.org/) pour la connexion SSH.
-  - Pour installer ce module, lancez :
-    ```bash
-    pip install paramiko
-    ```
+- Bibliothèques Python requises :
+  ```bash
+  pip install paramiko
+  ```
 
 ### b) Machine distante
 - Une distribution Linux (Debian/Ubuntu ou similaire) disposant d'un service SSH actif.
@@ -33,7 +29,7 @@ Ce projet Python permet de gérer à distance l'installation, la configuration, 
 ```
 Python4SRC2/
 ├── main.py                # Interface et menus interactifs de l'application.
-├── sshpackagemanager.py   # Classes de gestion SSH dédiées aux paquets, Apache, FTP, LDAP, utilisateurs et réseau.
+├── classes.py   # Classes de gestion SSH dédiées aux paquets, Apache, FTP, LDAP, utilisateurs et réseau.
 ├── colored_formatter.py   # Formatter de log personnalisé avec couleurs.
 ├── README.md              # Cette documentation.
 ```
@@ -60,8 +56,14 @@ Python4SRC2/
    ```
    Ajoutez par exemple :
    ```bash
-   Cmnd_Alias APACHE_CONF = /usr/bin/cat /etc/apache2/sites-available/*.conf
-   user ALL=(ALL) NOPASSWD: APACHE_CONF
+   # Alias permetant de limiter les commandes
+   Cmnd_Alias APACHE_CONF = /bin/cat /etc/apache2/sites-available/*.conf
+   Cmnd_Alias FTP_CONF    = /usr/bin/grep -E '^(anonymous_enable|local_enable|write_enable)' /etc/vsftpd.conf
+   # Pour un utilisateur
+   ouss ALL=(ALL) NOPASSWD: APACHE_CONF, FTP_CONF
+   # Pour les groupes
+   %admin  ALL=(ALL) NOPASSWD: ALL
+   %lambda ALL=(ALL) NOPASSWD: APACHE_CONF, FTP_CONF
    ```
 
 ---
@@ -75,12 +77,12 @@ Python4SRC2/
 
 2. **Au démarrage, entrez l'adresse IP ou le nom d'hôte de la machine distante, puis vos identifiants SSH.**
 3. **Naviguez ensuite dans le menu principal qui présente plusieurs sous-menus dédiés :**
-   - **Gestion des paquets classiques** pour installer, désinstaller, mettre à jour ou vérifier un paquet.
-   - **Gestion web (Apache2 + PHP)** pour installer et configurer des sites web.
-   - **Gestion du serveur FTP** pour configurer vsftpd.
-   - **Gestion du serveur LDAP** pour installer, reconfigurer et administrer OpenLDAP.
-   - **Gestion des utilisateurs Linux** pour créer, modifier ou supprimer des comptes utilisateurs.
-   - **Gestion du réseau et DNS** pour configurer les interfaces réseau et paramétrer des serveurs DNS.
+   - **Gestion des paquets**
+   - **Gestion web (Apache, Nginx, PHP)**
+   - **Configuration du FTP (vsftpd)**
+   - **Gestion LDAP (OpenLDAP, utilisateurs, groupes)**
+   - **Administration des utilisateurs Linux**
+   - **Configuration réseau (interfaces, IP, DNS)**
 
 ---
 
@@ -94,10 +96,9 @@ Python4SRC2/
   - `sudo apt-get remove -y <paquet>`
   - `dpkg -l | grep <paquet>`
 
-### b) Serveur Web (Apache2 + PHP)
-- **Installation d'Apache2 et PHP**  
-  Création de répertoires personnalisés dans `/var/www/html/` et configuration d’un fichier de site dans `/etc/apache2/sites-available/`.
-- **Activation / désactivation et rechargement du service Apache**.
+### b) Serveurs Web (Apache2, Nginx, PHP)
+- Installation automatique avec suppression des conflits.
+- Activation, désactivation et gestion des sites.
 
 ### c) Serveur FTP (vsftpd)
 - **Configuration de vsftpd**  
@@ -108,20 +109,14 @@ Python4SRC2/
 - **Installation et configuration automatisée** via un script Bash généré temporairement.
 - **Ajout / Suppression d’utilisateurs LDAP et d’Unités Organisationnelles (OU).**
 
-### e) Gestion des Utilisateurs Linux
-- **Création d’utilisateur avec home directory**
-  ```bash
-  sudo useradd -m <nom_utilisateur>
-  ```
-- **Modification de mot de passe :**
-  ```bash
-  echo '<nom_utilisateur>:<mot_de_passe>' | sudo chpasswd
-  ```
-- **Liste des utilisateurs et groupes.**
+### e) Utilisateurs Linux
+- Ajout, suppression et modification de mot de passe.
+- Gestion des groupes et attribution des permissions.
 
-### f) Configuration Réseau et DNS
-- **Affichage et configuration des interfaces réseau** (activation, désactivation, IP statique ou DHCP).
-- **Configuration des serveurs DNS** via modification du fichier `/etc/resolv.conf`.
+### f) Configuration Réseau
+- Activation/désactivation des interfaces.
+- Attribution d'une IP statique ou configuration DHCP.
+- Gestion des serveurs DNS via `/etc/resolv.conf`.
 
 ---
 
@@ -149,7 +144,7 @@ Python4SRC2/
 
 Les contributions sont les bienvenues !  
 - **Pull Requests** : N’hésitez pas à proposer des améliorations via des pull requests.
-- **Issues** : Signalez les problèmes ou les bugs dans la section [Issues](https://github.com/VotreCompte/Python4SRC2/issues).
+- **Issues** : Signalez les problèmes ou les bugs dans la section [Issues](https://github.com/OussBth/Python4SRC2/issues).
 
 ---
 
